@@ -125,13 +125,24 @@ def eject_card(card_name: str, partition) -> None:
                 capture_output=True,
             )
             print(f"[{card_name}] Eject command sent.", flush=True)
-        else:
-            subprocess.run(
-                ["udisksctl", "eject", "--block-device", partition.device],
-                check=True,
-                capture_output=True,
-            )
-            print(f"[{card_name}] Ejected.", flush=True)
+        else: # Linux
+            for cmd, label in [
+                (["udisksctl", "eject", "--block-device", partition.device], "udisksctl"),
+                (["eject", partition.device], "eject"),
+                (["umount", mountpoint], "umount"),
+            ]:
+                try:
+                    subprocess.run(cmd, check=True, capture_output=True)
+                    print(f"[{card_name}] Ejected ({label}).", flush=True)
+                    break
+                except (FileNotFoundError, subprocess.CalledProcessError):
+                    continue
+            else:
+                print(
+                    f"[{card_name}] Warning: could not eject (tried udisksctl, eject, umount).",
+                    file=sys.stderr,
+                    flush=True,
+                )
     except subprocess.CalledProcessError as exc:
         print(f"[{card_name}] Warning: eject failed: {exc}", file=sys.stderr, flush=True)
     except FileNotFoundError as exc:
