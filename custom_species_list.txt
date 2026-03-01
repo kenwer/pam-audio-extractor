@@ -1,0 +1,10 @@
+# One per line
+# <Scientific name>_<Common name>
+Turdus merula_Eurasian Blackbird
+Turdus philomelos_Song Thrush
+Turdus pilaris_Fieldfare
+Turdus viscivorus_Mistle Thrush
+Poecile montanus_Willow Tit
+Poecile palustris_Marsh Tit
+Asio otus_Long-eared Owl
+Athene noctua_Little Owl 

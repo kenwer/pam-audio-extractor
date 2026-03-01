@@ -1,0 +1,348 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.13"
+# dependencies = [
+#   "birdnet-analyzer",
+#   "gooey",
+# ]
+# ///
+
+import argparse
+import csv
+import subprocess
+import sys
+from datetime import datetime
+from pathlib import Path
+
+import birdnet_analyzer
+import birdnet_analyzer.config as birdnet_cfg
+
+USE_GUI = len(sys.argv) == 1 or "--ignore-gooey" in sys.argv
+if USE_GUI:
+    from gooey import Gooey, GooeyParser
+
+
+def print_version_info() -> None:
+    """Print version information for Python and installed packages."""
+    print(f"Python executable:  {sys.executable}")
+    print(f"Python version:     {sys.version}")
+    print()
+    print("Python packages installed in the current environment:")
+
+    # Try uv first (for uv-managed environments), fall back to pip
+    try:
+        subprocess.run(["uv", "pip", "freeze"], check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        try:
+            subprocess.run([sys.executable, "-m", "pip", "freeze"], check=True)
+        except subprocess.CalledProcessError:
+            print("Warning: Unable to list installed packages", file=sys.stderr)
+
+
+def _config_defaults(script_path: Path) -> dict:
+    """Read the script's section from config.toml next to the script.
+
+    Looks for a ``[<script-stem>]`` section, e.g. ``[analyze-PAM-recordings]``.
+    Returns an empty dict if the file or section does not exist.
+    """
+    import tomllib
+
+    config_path = script_path.parent / "config.toml"
+    if not config_path.exists():
+        return {}
+    with open(config_path, "rb") as f:
+        return tomllib.load(f).get(script_path.stem, {})
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse and return command-line arguments."""
+    if USE_GUI:
+        parser = GooeyParser(
+            description="Batch-analyze PAM bird recordings using BirdNET-Analyzer."
+        )
+    else:
+        parser = argparse.ArgumentParser(
+            description="Batch-analyze PAM bird recordings using BirdNET-Analyzer."
+        )
+
+    def gui(**kw) -> dict:
+        """Return kwargs only when running in GUI mode (Gooey widget hints)."""
+        return kw if USE_GUI else {}
+
+    # Pre-populate GUI form fields from config.toml on first launch (not on the
+    # --ignore-gooey pass when the actual work runs).
+    cfg = _config_defaults(Path(__file__)) if USE_GUI and "--ignore-gooey" not in sys.argv else {}
+
+    settings = parser.add_argument_group(
+        "Options", **({"gooey_options": {"columns": 1}} if USE_GUI else {})
+    )
+    settings.add_argument(
+        "audio_dir",
+        **({} if USE_GUI else {"nargs": "?"}),
+        **gui(widget="DirChooser"),
+        default=cfg.get("audio_dir") or None,
+        help="Path to root folder containing ARU subdirs with .wav/.WAV files",
+    )
+    settings.add_argument(
+        "--species-filter-file",
+        dest="species_filter_file",
+        default=cfg.get("species_filter_file") or None,
+        **gui(widget="FileChooser"),
+        help="Path to species filter file",
+    )
+    settings.add_argument(
+        "--min-conf",
+        dest="min_conf",
+        type=float,
+        default=cfg.get("min_conf", 0.25),
+        **gui(widget="DecimalField"),
+        help="Minimum confidence threshold for detections (default: 0.25)",
+    )
+    settings.add_argument(
+        "--output",
+        default=cfg.get("output") or None,
+        **gui(widget="DirChooser"),
+        help="Output directory (default: auto-generated)",
+    )
+
+    advanced = parser.add_argument_group("Advanced")
+    advanced.add_argument(
+        "--version", action="store_true", help="Show version information and exit"
+    )
+    return parser.parse_args()
+
+
+def load_species_filter(filter_path: str | Path) -> set[str]:
+    """Load a species filter file into a set of label strings.
+
+    Each non-blank, non-comment line is expected to be in BirdNET label format:
+    ``Scientific name_Common name`` (e.g. ``Porzana porzana_Spotted Crake``).
+    Lines starting with ``#`` and lines without an underscore (e.g. a header
+    row) are skipped.
+
+    Args:
+        filter_path: Path to the species filter text file.
+
+    Returns:
+        A set of label strings to retain.
+    """
+    species: set[str] = set()
+    with open(filter_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "_" in line:
+                species.add(line)
+    return species
+
+
+def parse_recording_time(stem: str) -> datetime | None:
+    """Parse a recording timestamp from an ARU filename stem.
+
+    Expects the format ``YYYYMMDD_HHMMSS`` (e.g. ``20260224_011000``).
+
+    Args:
+        stem: The filename stem (without extension).
+
+    Returns:
+        A :class:`datetime` object, or ``None`` if the stem does not match
+        the expected pattern.
+    """
+    try:
+        return datetime.strptime(stem, "%Y%m%d_%H%M%S")
+    except ValueError:
+        return None
+
+
+def default_output_dir(min_conf: float) -> str:
+    """Generate a default output directory name based on confidence and today's date.
+
+    The format is ``birdnet_detections_all_conf_{conf}_{YYYY_MM_DD}``, where
+    the decimal point in *min_conf* is replaced with an underscore.
+
+    Args:
+        min_conf: The minimum confidence threshold used for the run.
+
+    Returns:
+        A directory name such as ``birdnet-detections_conf_0_1_2026_02_26``.
+    """
+    date_str = datetime.now().strftime("%Y_%m_%d")
+    conf_str = str(min_conf).replace(".", "_")
+    return f"birdnet-detections_conf_{conf_str}_{date_str}"
+
+
+def validate_audio_dir(audio_dir: str) -> None:
+    """Check that audio_dir exists and contains the expected ARU subdirectory layout.
+
+    Expected structure::
+
+        audio_dir/
+          <ARU-ID>/
+            <YYYYMMDD_HHMMSS>.wav
+            ...
+
+    Hard failures (exits):
+    - Path does not exist or is not a directory
+    - No subdirectories found
+    - No .wav files found in any subdirectory
+
+    Warnings (printed, continues):
+    - Some subdirectories contain no .wav files
+    """
+    path = Path(audio_dir)
+
+    if not path.exists():
+        print(f"error: audio_dir not found: {path}", file=sys.stderr)
+        sys.exit(1)
+    if not path.is_dir():
+        print(f"error: audio_dir is not a directory: {path}", file=sys.stderr)
+        sys.exit(1)
+
+    subdirs = sorted(d for d in path.iterdir() if d.is_dir())
+    if not subdirs:
+        print(f"error: audio_dir has no subdirectories — expected one per ARU device", file=sys.stderr)
+        print(f"  Expected layout: {path}/<ARU-ID>/<YYYYMMDD_HHMMSS>.wav", file=sys.stderr)
+        sys.exit(1)
+
+    arus_with_audio: list[tuple[str, int]] = []
+    arus_without_audio: list[str] = []
+    for subdir in subdirs:
+        wav_files = [f for f in subdir.iterdir() if f.is_file() and f.suffix.lower() == ".wav"]
+        if wav_files:
+            arus_with_audio.append((subdir.name, len(wav_files)))
+        else:
+            arus_without_audio.append(subdir.name)
+
+    if not arus_with_audio:
+        print(f"error: no .wav files found in any subdirectory of {path}", file=sys.stderr)
+        print(f"  Expected layout: {path}/<ARU-ID>/<YYYYMMDD_HHMMSS>.wav", file=sys.stderr)
+        sys.exit(1)
+
+    if arus_without_audio:
+        print(
+            f"Warning: {len(arus_without_audio)} subdir(s) contain no .wav files and will be skipped: "
+            + ", ".join(arus_without_audio),
+            file=sys.stderr,
+        )
+
+    total_files = sum(n for _, n in arus_with_audio)
+    print(f"Found {len(arus_with_audio)} ARU(s), {total_files} .wav file(s):", file=sys.stderr)
+    for aru, count in arus_with_audio:
+        print(f"  {aru}: {count} file(s)", file=sys.stderr)
+
+
+def main() -> None:
+    """Entry point: run BirdNET-Analyzer and write an enriched detections CSV."""
+    args = parse_args()
+
+    if args.version:
+        print_version_info()
+        return
+
+    if not args.audio_dir:
+        print("error: audio_dir is required", file=sys.stderr)
+        sys.exit(1)
+
+    validate_audio_dir(args.audio_dir)
+
+    output_dir = args.output or default_output_dir(args.min_conf)
+    csv_output_path = str(Path(output_dir) / "All-BirdNET-detections.csv")
+
+    species_set: set[str] | None = None
+    if args.species_filter_file:
+        species_set = load_species_filter(args.species_filter_file)
+        print(f"Loaded {len(species_set)} species from filter file.", file=sys.stderr)
+
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    print(f"Running BirdNET-Analyzer on {args.audio_dir} ...", file=sys.stderr)
+
+    # Runs BirdNET on every audio file found recursively under audio_dir.
+    # Per-file results (*.BirdNET.results.csv) are written to output_dir,
+    # mirroring the subdirectory structure of audio_dir. 
+    # combine_results=True also writes a single BirdNET_CombinedTable.csv there.
+    # slist: pre-filters detections to the species in the filter file during
+    # analysis (hopefully more efficient than post-filtering). Has no effect when lat/lon
+    # are provided — in that case BirdNET uses the geographic species model instead.
+    # API source: https://github.com/birdnet-team/BirdNET-Analyzer/blob/main/birdnet_analyzer/analyze/core.py
+    birdnet_analyzer.analyze(
+        args.audio_dir,
+        output=output_dir,
+        min_conf=args.min_conf,
+        slist=args.species_filter_file,
+        rtype="csv",
+        combine_results=True,
+        #batch_size = 16,
+        locale="en",
+        #use_perch = True,
+    )
+
+    combined_csv = Path(output_dir) / birdnet_cfg.OUTPUT_CSV_FILENAME # "BirdNET_Combined.csv"
+
+    if not combined_csv.exists():
+        print("No detections found.", file=sys.stderr)
+        return
+
+    fieldnames = [
+        "file",
+        "aru_number",
+        "species",
+        "scientific_name",
+        "confidence",
+        "start_time",
+        "end_time",
+        "recording_time",
+    ]
+
+    total_detections = 0
+
+    with (
+        open(combined_csv, newline="", encoding="utf-8") as infile,
+        open(csv_output_path, "w", newline="", encoding="utf-8") as outfile,
+    ):
+        reader = csv.DictReader(infile)
+        writer = csv.DictWriter(outfile, fieldnames=fieldnames)
+        writer.writeheader()
+
+        for row in reader:
+            scientific_name: str = row["Scientific name"]
+            label: str = f"{scientific_name}_{row['Common name']}"
+
+            if species_set is not None and label not in species_set:
+                continue
+
+            file_path = Path(row["File"])
+            aru_number: str = file_path.parent.name
+            recording_time: datetime | None = parse_recording_time(file_path.stem)
+
+            writer.writerow({
+                "file": row["File"],
+                "aru_number": aru_number,
+                "species": row["Common name"],
+                "scientific_name": scientific_name,
+                "confidence": row["Confidence"],
+                "start_time": row["Start (s)"],
+                "end_time": row["End (s)"],
+                "recording_time": str(recording_time) if recording_time else "",
+            })
+            total_detections += 1
+
+    print(file=sys.stderr)
+    print(f"Total detections: {total_detections}", file=sys.stderr)
+    print(f"  Output dir    : {output_dir}/", file=sys.stderr)
+    print(f"  Detections CSV: {csv_output_path}", file=sys.stderr)
+
+
+if USE_GUI:
+    main = Gooey(
+        program_name="Analyze PAM Recordings",
+        show_progress_bar=True,
+        default_size=(800, 700),
+        navigation="TABBED",
+        show_stop_button=False,
+        body_width=80,
+        required_cols=1,
+        required_rows=1,
+    )(main)
+
+if __name__ == "__main__":
+    main()

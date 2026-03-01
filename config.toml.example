@@ -1,0 +1,73 @@
+# PAM-AudioExtractor — configuration file
+#
+# Each script reads only its own [section].
+#
+# Copy to config.toml and edit:
+#   cp config.toml.example config.toml
+#
+# CLI arguments always take precedence over config.toml.
+# When no CLI arguments are given, config.toml values prepopulate the GUI fields.
+
+
+# ─── 1-import-pam-recordings.py ─────────────────────────────────────────────
+[1-import-pam-recordings]
+
+# Root folder where MSD-* subdirectories will be created (required)
+target_dir = "C:/Data/audio-recordings"
+
+# Regular expression matched against the SD card volume name (case-insensitive).
+# Default matches the MSD-108 / MSD-110 naming convention used by the PAM devices.
+card_pattern = "^MSD-"
+
+# Overwrite files that already exist in the destination.
+# When false (default), existing files are skipped with a warning.
+overwrite = false
+
+# Number of concurrent copy operations (default: 2)
+# Two workers keeps throughput high without saturating a shared USB hub.
+workers = 2
+
+
+# ─── 2-analyze-PAM-recordings.py ────────────────────────────────────────────
+[2-analyze-PAM-recordings]
+
+# Path to root folder containing ARU subdirectories with .wav/.WAV files (required)
+audio_dir = "C:/Data/audio-recordings"
+
+# Path to species filter file — one "Scientific name_Common name" label per line
+# (leave empty to analyze all species)
+species_filter_file = ""
+
+# Minimum BirdNET confidence threshold (0–1)
+min_conf = 0.25
+
+# Output directory (leave empty to auto-generate based on confidence and today's date)
+output = ""
+
+
+# ─── 3-extract-top-detections.py ────────────────────────────────────────────
+[3-extract-top-detections]
+
+# Path to the detections CSV produced by 2-analyze-PAM-recordings.py (required)
+detections_csv = "C:/Data/birdnet-detections/All-BirdNET-detections.csv"
+
+# Maximum snippets per (ARU, species) pair, ranked by confidence
+top_n = 10
+
+# Seconds of audio to include before and after each detection window
+padding = 3.0
+
+# Output root directory (leave empty to use <csv_dir>/top-detections)
+output = ""
+
+# Path to species filter file — one "Scientific name_Common name" label per line
+# (same file format as 2-analyze-PAM-recordings; leave empty to include all species)
+species_filter_file = ""
+
+# Restrict to specific ARU numbers (leave empty to include all ARUs)
+# aru = ["MSD-109", "MSD-110"]
+aru = []
+
+# Restrict to a date range — format: "YYYY-MM-DD" (leave empty for no restriction)
+date_from = ""
+date_to = ""

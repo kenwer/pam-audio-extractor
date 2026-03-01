@@ -1,0 +1,155 @@
+# PAM Audio Extractor
+A set of Python scripts to analyze Passive Acoustic Monitoring (PAM) bird recordings using [BirdNET-Analyzer](https://github.com/BirdNET-Team/BirdNET-Analyzer), and to extract the highest-confidence detections as audio snippets for human review.
+
+## Prerequisites
+This project requires [`uv`](https://docs.astral.sh/uv/) that handles Python plus all library installs, and [`ffmpeg`](https://ffmpeg.org/) which is required by BirdNET for audio decoding.
+
+Run the installer script to install both and pre-populate the uv cache:
+* using the installer script:
+  ```shell
+  ./0-install-prereqs.sh # Linux and macOS
+  0-install-prereqs.bat  # Windows
+  ```
+* or install manually:
+  ```shell
+  brew install uv ffmpeg         # macOS
+  winget install uv ffmpeg       # Windows 
+  sudo apt-get install uv ffmpeg # Debian/Ubuntu based Linux
+  sudo dnf install uv ffmpe      # Fedora/RHEL based Linux
+  sudo pacman -S uv ffmpeg       # Arch/Manjaro based Linux
+  ```
+
+> Note: on the first run `uv` downloads Python and all dependencies automatically. You may run any script once with `--version` beforehand to populate the cache and avoid delays at the start of a session:
+> ```bash
+> ./1-import-pam-recordings.py --version
+> ./2-analyze-PAM-recordings.py --version
+> ./3-extract-top-detections.py --version
+> ```
+
+
+## Workflow
+The tooling covers three steps: 1) copy recordings from SD cards onto disk, 2) run BirdNET to detect species across all recordings, then 3) extract the highest-confidence snippets per species for human review.
+
+Each step can be performed using the **GUI** or using the **CLI**. The GUI opens when the script is run with no arguments. If a `config.toml` exists, the form will use it to pre-populate parameters. On Windows, use the `.bat` launcher instead of the `.py` file.
+
+
+### Step 1 — Import SD card recordings
+
+* GUI:
+  ```shell
+  ./1-import-pam-recordings.py  # Linux and macOS
+  1-import-pam-recordings.bat   # Windows
+  ```
+* CLI:
+  ```shell
+  ./1-import-pam-recordings.py /path/to/audio-recordings
+  ```
+
+Once running, it waits for SD cards to be inserted into the reader. The script detects each matching volume, copies its WAV files into `<target_dir>/<card-name>/`, and ejects the card when finished.
+
+| Option | Default | Description |
+|---|---|---|
+| `target_dir` | — | Root folder where `MSD-*/` subdirectories are created |
+| `--card-pattern` | `^MSD-` | Regex matched against the SD card volume name (case-insensitive) |
+| `--overwrite` | off | Overwrite files that already exist in the destination |
+| `--workers` | `2` | Concurrent copy operations |
+
+---
+
+### Step 2 — Analyze recordings with BirdNET
+
+* GUI:
+  ```shell
+  ./2-analyze-PAM-recordings.py  # Linux and macOS
+  2-analyze-PAM-recordings.bat   # Windows
+  ```
+* CLI:
+  ```shell
+  ./2-analyze-PAM-recordings.py /path/to/audio-recordings --species-filter-file ./custom_species_list.txt
+  ```
+
+Output is written to the specified output directory:
+```
+birdnet-detections_conf_0_25_2026_02_26/
+  All-BirdNET-detections.csv          # enriched detections for all ARUs
+  BirdNET_Combined.csv                # raw BirdNET output
+  MSD-109/
+    20260225_064500.BirdNET.results.csv
+    ...
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `audio_dir` | — | Root folder containing ARU subdirectories |
+| `--species-filter-file` | none | Species filter file (`Scientific name_Common name`, one per line) |
+| `--min-conf` | `0.25` | Minimum confidence threshold (0–1) |
+| `--output` | auto-generated | Override output directory |
+
+Species filter file format — one BirdNET label per line:
+```
+# Target species
+Turdus merula_Eurasian Blackbird
+Porzana porzana_Spotted Crake
+Ardea cinerea_Grey Heron
+```
+
+---
+
+### Step 3 — Extract top detections for review
+
+* GUI:
+  ```shell
+  ./3-extract-top-detections.py  # Linux and macOS
+  3-extract-top-detections.bat   # Windows
+  ```
+* CLI:
+  ```shell
+  ./3-extract-top-detections.py birdnet-detections_conf_0_25_2026_02_26/All-BirdNET-detections.csv
+  ```
+
+Snippets are written to the specified output directory. Each filename encodes ARU, species, rank, confidence, timestamp, and detection window:
+```
+MSD-109_-_Turdus merula_Eurasian Blackbird_-_01_conf0.8014_20260225_064500_6.0-9.0.wav
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `detections_csv` | — | Path to `All-BirdNET-detections.csv` |
+| `--top-n` | `10` | Max snippets per (ARU, species) pair, ranked by confidence |
+| `--padding` | `3.0` | Seconds of audio before/after each detection window |
+| `--output` | `<csv_dir>/top-detections` | Override output directory |
+| `--species-filter-file` | none | Species filter file |
+| `--aru` | all | Restrict to specific ARUs (repeatable) |
+| `--date-from` / `--date-to` | none | Date range filter (`YYYY-MM-DD`) |
+
+```bash
+# One ARU, filtered to species list, from a specific date
+./3-extract-top-detections.py All-BirdNET-detections.csv \
+  --aru MSD-109 --species-filter-file ./custom_species_list.txt --date-from 2026-02-25
+
+# Top 5 snippets with tighter padding
+./3-extract-top-detections.py All-BirdNET-detections.csv --top-n 5 --padding 1.5
+```
+
+---
+
+## Audio File Structure
+
+`1-import-pam-recordings.py` creates this layout automatically. If importing manually, match it exactly:
+```
+audio-recordings/
+  MSD-109/
+    20260225_064500.WAV
+    20260225_070000.WAV
+    ...
+  MSD-110/
+    20260225_064500.WAV
+    ...
+```
+- Each subdirectory name is used as the ARU identifier
+- Filenames must follow `YYYYMMDD_HHMMSS` for timestamps to be parsed
+- Files should be 16-bit PCM WAV, mono, 48 000 Hz (standard ARU output)
+
+## License
+
+This project is licensed under the AGPL-3.0 license. See the LICENSE file for the full text.

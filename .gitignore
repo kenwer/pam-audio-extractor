@@ -1,0 +1,29 @@
+# Python-specific ignores
+**/__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+build/
+dist/
+
+# Egg-info directories 
+*.egg-info/
+**/*.egg-info/
+*.egg
+
+# IDE-specific files
+.vscode/
+.idea/
+
+# Miscellaneous
+**/*.patch
+**/*.log
+**/.DS_Store
+**/Thumbs.db
+
+# Project-specific ignores
+config.toml
+audio_recordings
+birdnet-detections*
