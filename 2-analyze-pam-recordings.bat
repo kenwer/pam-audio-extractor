@@ -11,5 +11,5 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-uv run --script "%~dp02-analyze-PAM-recordings.py"
+uv run --script "%~dp02-analyze-pam-recordings.py"
 pause

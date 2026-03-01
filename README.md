@@ -22,7 +22,7 @@ Run the installer script to install both and pre-populate the uv cache:
 > Note: on the first run `uv` downloads Python and all dependencies automatically. You may run any script once with `--version` beforehand to populate the cache and avoid delays at the start of a session:
 > ```bash
 > ./1-import-pam-recordings.py --version
-> ./2-analyze-PAM-recordings.py --version
+> ./2-analyze-pam-recordings.py --version
 > ./3-extract-top-detections.py --version
 > ```
 
@@ -60,12 +60,12 @@ Once running, it waits for SD cards to be inserted into the reader. The script d
 
 * GUI:
   ```shell
-  ./2-analyze-PAM-recordings.py  # Linux and macOS
-  2-analyze-PAM-recordings.bat   # Windows
+  ./2-analyze-pam-recordings.py  # Linux and macOS
+  2-analyze-pam-recordings.bat   # Windows
   ```
 * CLI:
   ```shell
-  ./2-analyze-PAM-recordings.py /path/to/audio-recordings --species-filter-file ./custom_species_list.txt
+  ./2-analyze-pam-recordings.py /path/to/audio-recordings --species-filter-file ./custom_species_list.txt
   ```
 
 Output is written to the specified output directory:

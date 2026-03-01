@@ -28,8 +28,8 @@ overwrite = false
 workers = 2
 
 
-# ─── 2-analyze-PAM-recordings.py ────────────────────────────────────────────
-[2-analyze-PAM-recordings]
+# ─── 2-analyze-pam-recordings.py ────────────────────────────────────────────
+[2-analyze-pam-recordings]
 
 # Path to root folder containing ARU subdirectories with .wav/.WAV files (required)
 audio_dir = "C:/Data/audio-recordings"
@@ -48,7 +48,7 @@ output = ""
 # ─── 3-extract-top-detections.py ────────────────────────────────────────────
 [3-extract-top-detections]
 
-# Path to the detections CSV produced by 2-analyze-PAM-recordings.py (required)
+# Path to the detections CSV produced by 2-analyze-pam-recordings.py (required)
 detections_csv = "C:/Data/birdnet-detections/All-BirdNET-detections.csv"
 
 # Maximum snippets per (ARU, species) pair, ranked by confidence
@@ -61,7 +61,7 @@ padding = 3.0
 output = ""
 
 # Path to species filter file — one "Scientific name_Common name" label per line
-# (same file format as 2-analyze-PAM-recordings; leave empty to include all species)
+# (same file format as 2-analyze-pam-recordings; leave empty to include all species)
 species_filter_file = ""
 
 # Restrict to specific ARU numbers (leave empty to include all ARUs)

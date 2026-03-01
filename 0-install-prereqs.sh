@@ -32,7 +32,7 @@ fi
 echo ""
 echo "Populating uv cache (this may take a while on first run)..."
 "$SCRIPT_DIR/1-import-pam-recordings.py" --version
-"$SCRIPT_DIR/2-analyze-PAM-recordings.py" --version
+"$SCRIPT_DIR/2-analyze-pam-recordings.py" --version
 "$SCRIPT_DIR/3-extract-top-detections.py" --version
 
 echo "Done."
