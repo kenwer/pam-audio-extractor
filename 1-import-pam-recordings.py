@@ -117,20 +117,26 @@ def eject_card(card_name: str, partition) -> None:
             import ctypes.wintypes
             drive_letter = mountpoint[0]
             # Open the volume device, then lock, dismount, and eject via DeviceIoControl.
-            # Equivalent to Explorer's "Eject"; works for SD card readers.
-            GENERIC_READ              = 0x80000000
-            FILE_SHARE_RW             = 0x00000001 | 0x00000002
-            OPEN_EXISTING             = 3
-            FSCTL_LOCK_VOLUME         = 0x00090018
-            FSCTL_DISMOUNT_VOLUME     = 0x00090020
-            IOCTL_STORAGE_EJECT_MEDIA = 0x2D4808
-            ERROR_ACCESS_DENIED       = 5
-            ERROR_SHARING_VIOLATION   = 32
+            # Should be equivalent to Explorer's "Eject".
+            # See: 
+            #  - https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew
+            #  - https://learn.microsoft.com/en-us/windows/win32/devio/device-input-and-output-control-ioctl-
+            #  - https://learn.microsoft.com/en-us/windows/win32/devio/calling-deviceiocontrol
+            FSCTL_LOCK_VOLUME         = 0x00090018  # winioctl.h
+            FSCTL_DISMOUNT_VOLUME     = 0x00090020  # winioctl.h
+            IOCTL_STORAGE_EJECT_MEDIA = 0x2D4808    # winioctl.h / ntddstor.h
+            ERROR_ACCESS_DENIED       = 5           # winerror.h
+            ERROR_SHARING_VIOLATION   = 32          # winerror.h
             INVALID_HANDLE_VALUE      = ctypes.c_void_p(-1).value
             kernel32 = ctypes.windll.kernel32
             handle = kernel32.CreateFileW(
                 f"\\\\.\\{drive_letter}:",
-                GENERIC_READ, FILE_SHARE_RW, None, OPEN_EXISTING, 0, None,
+                0x80000000,           # GENERIC_READ (winnt.h)
+                0x00000003,           # FILE_SHARE_READ | FILE_SHARE_WRITE
+                None,                 # lpSecurityAttributes
+                3,                    # OPEN_EXISTING
+                0,                    # dwFlagsAndAttributes
+                None                  # hTemplateFile
             )
             if handle == INVALID_HANDLE_VALUE:
                 raise OSError(f"Cannot open {drive_letter}: — {ctypes.FormatError()}")
