@@ -339,6 +339,51 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _win32_suppress_autoplay() -> int | None:
+    """Disable Windows AutoPlay for removable drives (HKCU) to prevent Explorer pop-ups.
+
+    Returns the previous registry value so it can be restored on exit, or None
+    if the value didn't exist or the registry could not be accessed.
+    """
+    import ctypes
+    import winreg
+    key_path = r"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"
+    value    = "NoDriveTypeAutoRun"
+    removable_bit = 0x04
+    try:
+        with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, key_path, 0,
+                                winreg.KEY_READ | winreg.KEY_WRITE) as key:
+            try:
+                prev, _ = winreg.QueryValueEx(key, value)
+            except FileNotFoundError:
+                prev = None
+            winreg.SetValueEx(key, value, 0, winreg.REG_DWORD, (prev or 0) | removable_bit)
+        # Broadcast WM_SETTINGCHANGE so the shell re-reads the policy immediately rather than waiting for a restart
+        ctypes.windll.user32.SendMessageTimeoutW(0xFFFF, 0x001A, 0, "Policy", 0x0002, 5000, ctypes.byref(ctypes.c_ulong()))
+        return prev
+    except OSError:
+        return None
+
+
+def _win32_restore_autoplay(prev: int | None) -> None:
+    """Restore the AutoPlay registry value saved by _win32_suppress_autoplay."""
+    import winreg
+    key_path = r"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"
+    value    = "NoDriveTypeAutoRun"
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0,
+                            winreg.KEY_WRITE) as key:
+            if prev is None:
+                try:
+                    winreg.DeleteValue(key, value)
+                except FileNotFoundError:
+                    pass
+            else:
+                winreg.SetValueEx(key, value, 0, winreg.REG_DWORD, prev)
+    except OSError:
+        pass
+
+
 def main() -> None:
     """Watch for SD cards matching card_pattern and import their recordings into target_dir."""
     args = parse_args()
@@ -385,6 +430,7 @@ def main() -> None:
     )
     poll_thread.start()
 
+    prev_autoplay = _win32_suppress_autoplay() if sys.platform == "win32" else None
     try:
         while True:
             time.sleep(1)
@@ -393,6 +439,9 @@ def main() -> None:
         stop_event.set()
         copy_queue.join()
         print("All done.", flush=True)
+    finally:
+        if sys.platform == "win32":
+            _win32_restore_autoplay(prev_autoplay)
 
 
 if USE_GUI:
