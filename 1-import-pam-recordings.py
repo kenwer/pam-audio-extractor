@@ -113,18 +113,32 @@ def eject_card(card_name: str, partition) -> None:
             )
             print(f"[{card_name}] Ejected.", flush=True)
         elif sys.platform == "win32":
+            import ctypes
             drive_letter = mountpoint[0]
-            subprocess.run(
-                [
-                    "powershell",
-                    "-command",
-                    f'(New-Object -comObject Shell.Application)'
-                    f'.Namespace(17).ParseName("{drive_letter}:").InvokeVerb("Eject")',
-                ],
-                check=True,
-                capture_output=True,
+            # Open the volume device, then lock, dismount, and eject via DeviceIoControl
+            # This should be equivalent to Explorer's "Eject" and works for SD card readers
+            GENERIC_READ       = 0x80000000
+            FILE_SHARE_RW      = 0x00000001 | 0x00000002
+            OPEN_EXISTING      = 3
+            FSCTL_LOCK_VOLUME   = 0x00090018
+            FSCTL_DISMOUNT_VOLUME = 0x00090020
+            IOCTL_STORAGE_EJECT_MEDIA = 0x2D4808
+            INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
+            kernel32 = ctypes.windll.kernel32
+            handle = kernel32.CreateFileW(
+                f"\\\\.\\{drive_letter}:",
+                GENERIC_READ, FILE_SHARE_RW, None, OPEN_EXISTING, 0, None,
             )
-            print(f"[{card_name}] Eject command sent.", flush=True)
+            if handle == INVALID_HANDLE_VALUE:
+                raise OSError(f"Cannot open {drive_letter}: — {ctypes.FormatError()}")
+            try:
+                n = ctypes.c_uint32()
+                kernel32.DeviceIoControl(handle, FSCTL_LOCK_VOLUME,         None, 0, None, 0, ctypes.byref(n), None)
+                kernel32.DeviceIoControl(handle, FSCTL_DISMOUNT_VOLUME,     None, 0, None, 0, ctypes.byref(n), None)
+                kernel32.DeviceIoControl(handle, IOCTL_STORAGE_EJECT_MEDIA, None, 0, None, 0, ctypes.byref(n), None)
+            finally:
+                kernel32.CloseHandle(handle)
+            print(f"[{card_name}] Ejected.", flush=True)
         else: # Linux
             for cmd, label in [
                 (["udisksctl", "eject", "--block-device", partition.device], "udisksctl"),
@@ -171,26 +185,28 @@ def copy_card(
         print(f"[{card_name}] No WAV files found on card.", flush=True)
         return
 
-    print(
-        f"[{card_name}] Found {len(files_to_copy)} file(s) to copy to {dest_dir}",
-        flush=True,
-    )
+    total = len(files_to_copy)
+    print(f"[{card_name}] Copying {total} file(s) to {dest_dir}", flush=True)
 
     copied = 0
     skipped = 0
     total_bytes = 0
     start_time = time.monotonic()
+    milestone = max(1, total // 10)
 
-    for src in sorted(files_to_copy):
+    for i, src in enumerate(sorted(files_to_copy), 1):
         dest = dest_dir / src.name
         if dest.exists() and not overwrite:
-            print(f"[{card_name}] Skipping (already exists): {src.name}", flush=True)
             skipped += 1
-            continue
-        print(f"[{card_name}] Copying: {src.name}", flush=True)
-        shutil.copy2(src, dest)
-        total_bytes += src.stat().st_size
-        copied += 1
+        else:
+            shutil.copy2(src, dest)
+            total_bytes += src.stat().st_size
+            copied += 1
+
+        if i % milestone == 0 or i == total:
+            pct = int(100 * i / total)
+            drive = f" {partition.mountpoint[0]}:" if sys.platform == "win32" else ""
+            print(f"[{card_name}{drive}] {i}/{total} ({pct}%)", flush=True)
 
     elapsed = time.monotonic() - start_time
     total_mb = total_bytes / (1024 * 1024)
@@ -203,6 +219,7 @@ def copy_card(
 
 def worker(
     copy_queue: queue.Queue,
+    seen: set[str],
     target_dir: Path,
     overwrite: bool,
 ) -> None:
@@ -216,6 +233,8 @@ def worker(
         try:
             copy_card(card_name, partition, target_dir, overwrite)
             eject_card(card_name, partition)
+            # Allow re-insertion: remove from seen so the card is detected again if re-inserted.
+            seen.discard(card_name)
         except Exception as exc:
             print(f"[{card_name}] Error: {exc}", file=sys.stderr, flush=True)
         finally:
@@ -293,11 +312,12 @@ def parse_args() -> argparse.Namespace:
         help="Overwrite files that already exist in the destination (default: skip with warning)",
     )
     settings.add_argument(
-        "--workers",
+        "--num-workers",
+        dest="num_workers",
         type=int,
-        default=cfg.get("workers", 2),
+        default=cfg.get("num_workers", 2),
         **gui(widget="IntegerField"),
-        help="Number of concurrent copy operations (default: 2)",
+        help="Number of cards to copy concurrently (default: 2)",
     )
     advanced = parser.add_argument_group("Advanced")
     advanced.add_argument(
@@ -329,7 +349,7 @@ def main() -> None:
 
     print(f"Target directory : {target_dir}", flush=True)
     print(f"Card pattern     : {args.card_pattern}", flush=True)
-    print(f"Concurrent copies: {args.workers}", flush=True)
+    print(f"Concurrent copies: {args.num_workers}", flush=True)
     print(f"Overwrite files  : {args.overwrite}", flush=True)
     print(flush=True)
 
@@ -337,16 +357,12 @@ def main() -> None:
     seen: set[str] = set()
     stop_event = threading.Event()
 
-    # Start worker threads
-    workers = []
-    for _ in range(args.workers):
-        t = threading.Thread(
+    for _ in range(args.num_workers):
+        threading.Thread(
             target=worker,
-            args=(copy_queue, target_dir, args.overwrite),
+            args=(copy_queue, seen, target_dir, args.overwrite),
             daemon=True,
-        )
-        t.start()
-        workers.append(t)
+        ).start()
 
     # Start polling thread
     poll_thread = threading.Thread(

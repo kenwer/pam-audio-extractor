@@ -52,7 +52,7 @@ Once running, it waits for SD cards to be inserted into the reader. The script d
 | `target_dir` | — | Root folder where `MSD-*/` subdirectories are created |
 | `--card-pattern` | `^MSD-` | Regex matched against the SD card volume name (case-insensitive) |
 | `--overwrite` | off | Overwrite files that already exist in the destination |
-| `--workers` | `2` | Concurrent copy operations |
+| `--num-workers` | `2` | Number of cards to copy concurrently |
 
 ---
 

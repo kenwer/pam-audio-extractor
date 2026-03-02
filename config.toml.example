@@ -23,9 +23,8 @@ card_pattern = "^MSD-"
 # When false (default), existing files are skipped with a warning.
 overwrite = false
 
-# Number of concurrent copy operations (default: 2)
-# Two workers keeps throughput high without saturating a shared USB hub.
-workers = 2
+# Number of cards to copy concurrently (default: 2)
+num_workers = 2
 
 
 # ─── 2-analyze-pam-recordings.py ────────────────────────────────────────────
