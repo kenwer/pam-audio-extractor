@@ -114,16 +114,19 @@ def eject_card(card_name: str, partition) -> None:
             print(f"[{card_name}] Ejected.", flush=True)
         elif sys.platform == "win32":
             import ctypes
+            import ctypes.wintypes
             drive_letter = mountpoint[0]
-            # Open the volume device, then lock, dismount, and eject via DeviceIoControl
-            # This should be equivalent to Explorer's "Eject" and works for SD card readers
-            GENERIC_READ       = 0x80000000
-            FILE_SHARE_RW      = 0x00000001 | 0x00000002
-            OPEN_EXISTING      = 3
-            FSCTL_LOCK_VOLUME   = 0x00090018
-            FSCTL_DISMOUNT_VOLUME = 0x00090020
+            # Open the volume device, then lock, dismount, and eject via DeviceIoControl.
+            # Equivalent to Explorer's "Eject"; works for SD card readers.
+            GENERIC_READ              = 0x80000000
+            FILE_SHARE_RW             = 0x00000001 | 0x00000002
+            OPEN_EXISTING             = 3
+            FSCTL_LOCK_VOLUME         = 0x00090018
+            FSCTL_DISMOUNT_VOLUME     = 0x00090020
             IOCTL_STORAGE_EJECT_MEDIA = 0x2D4808
-            INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
+            ERROR_ACCESS_DENIED       = 5
+            ERROR_SHARING_VIOLATION   = 32
+            INVALID_HANDLE_VALUE      = ctypes.c_void_p(-1).value
             kernel32 = ctypes.windll.kernel32
             handle = kernel32.CreateFileW(
                 f"\\\\.\\{drive_letter}:",
@@ -133,9 +136,19 @@ def eject_card(card_name: str, partition) -> None:
                 raise OSError(f"Cannot open {drive_letter}: — {ctypes.FormatError()}")
             try:
                 n = ctypes.c_uint32()
-                kernel32.DeviceIoControl(handle, FSCTL_LOCK_VOLUME,         None, 0, None, 0, ctypes.byref(n), None)
-                kernel32.DeviceIoControl(handle, FSCTL_DISMOUNT_VOLUME,     None, 0, None, 0, ctypes.byref(n), None)
-                kernel32.DeviceIoControl(handle, IOCTL_STORAGE_EJECT_MEDIA, None, 0, None, 0, ctypes.byref(n), None)
+                # Retry locking: Explorer, antivirus, or the indexer may briefly hold
+                # the volume after the copy finishes, causing LOCK_VOLUME to fail.
+                for attempt in range(1, 11):
+                    if kernel32.DeviceIoControl(handle, FSCTL_LOCK_VOLUME, None, 0, None, 0, ctypes.byref(n), None):
+                        break
+                    err = kernel32.GetLastError()
+                    if err not in (ERROR_ACCESS_DENIED, ERROR_SHARING_VIOLATION) or attempt == 10:
+                        raise OSError(f"FSCTL_LOCK_VOLUME failed — {ctypes.FormatError(err)}")
+                    time.sleep(0.5)
+                if not kernel32.DeviceIoControl(handle, FSCTL_DISMOUNT_VOLUME, None, 0, None, 0, ctypes.byref(n), None):
+                    raise OSError(f"FSCTL_DISMOUNT_VOLUME failed — {ctypes.FormatError()}")
+                if not kernel32.DeviceIoControl(handle, IOCTL_STORAGE_EJECT_MEDIA, None, 0, None, 0, ctypes.byref(n), None):
+                    raise OSError(f"IOCTL_STORAGE_EJECT_MEDIA failed — {ctypes.FormatError()}")
             finally:
                 kernel32.CloseHandle(handle)
             print(f"[{card_name}] Ejected.", flush=True)
