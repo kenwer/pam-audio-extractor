@@ -95,12 +95,13 @@ birdnet-detections_conf_0_25_2026_02_26/
 | `audio_dir` | — | Root folder containing ARU subdirectories |
 | `--species-filter-file` | none | Species filter file (`Scientific name_Common name`, one per line). Ignored when `--lat`/`--lon` are set. |
 | `--min-conf` | `0.25` | Minimum confidence threshold (0–1) |
-| `--top-n` | no limit | Maximum detections per 3-second segment [1–4], ranked by confidence. Useful to suppress low-ranked secondary matches that are usually incorrect. |
+| `--top-n` | no limit | Maximum detections per 3-second segment [1–20], ranked by confidence. Useful to suppress low-ranked secondary matches that are usually incorrect. |
 | `--output` | auto-generated | Override output directory |
 | `--lat` | `-1` (off) | Recording location latitude. Enables geographic (eBird-like) species filtering; requires `--lon`. |
 | `--lon` | `-1` (off) | Recording location longitude. See `--lat`. |
-| `--week` | auto | Week of year [1–48] for seasonal filtering. Only used with `--lat`/`--lon`. Omit to auto-detect from WAV GUANO metadata (most common week across all files). Set `-1` to force year-round. |
+| `--week` | `Auto` | Week of year [1–48] for seasonal filtering. Only used with `--lat`/`--lon`. `Auto`: detect from WAV GUANO metadata. `Year-round` (or `-1` on CLI): disable seasonal filtering. |
 | `--overlap` | `0.0` | Overlap of prediction segments in seconds [0.0–2.9]. Higher values produce more detections at the cost of longer runtime. |
+| `--num-threads` | auto | Number of CPU threads for parallel file analysis. Auto-detected via `os.cpu_count()`. |
 
 #### Species filtering
 The script allows to filter species according to this decision tree:
@@ -108,7 +109,7 @@ The script allows to filter species according to this decision tree:
 Are --lat and --lon provided?
 ├─ YES: use geographic model (ignores --species-filter-file)
 │       is --week provided?
-│        ├─ YES: use specified week (or -1 for year-round)
+│        ├─ YES: use specified week (or Year-round / -1 for year-round)
 │        └─ NO:  auto-detect from WAV GUANO metadata (most common week)
 └─ NO:  is --species-filter-file provided?
          ├─ YES: restrict analysis to the listed species

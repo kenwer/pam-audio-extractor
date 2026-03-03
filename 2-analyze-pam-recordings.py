@@ -11,6 +11,7 @@
 import argparse
 import csv
 import math
+import os
 import subprocess
 import sys
 from collections import Counter, defaultdict
@@ -162,6 +163,13 @@ def parse_args() -> argparse.Namespace:
             "Overlap of prediction segments in seconds [0.0, 2.9]. "
             "Higher values produce more detections but increase runtime (default: 0.0)."
         ),
+    )
+    advanced.add_argument(
+        "--num-threads",
+        dest="num_threads",
+        choices=["Auto"] + [str(i) for i in [1, 2, 4, 8, 16, 32, 64, 128, 256]],
+        default="Auto" if not cfg.get("num_threads") else str(cfg.get("num_threads")),
+        help="Number of CPU threads for parallel file analysis (default: auto-detect via os.cpu_count())",
     )
     advanced.add_argument(
         "--version", action="store_true", help="Show version information and exit"
@@ -415,6 +423,7 @@ def main() -> None:
         week = detect_predominant_week(args.audio_dir)  # if None, BirdNET uses -1
 
     top_n = None if args.top_n in (None, "No limit") else int(args.top_n)
+    num_threads = os.cpu_count() or 8 if args.num_threads in (None, "Auto") else int(args.num_threads)
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
@@ -440,6 +449,7 @@ def main() -> None:
         top_n=top_n,
         rtype="csv",
         combine_results=True,
+        threads=num_threads,
         #show_progress=True,  # suppresses per-file output; uncomment once available https://github.com/birdnet-team/BirdNET-Analyzer/pull/854
         #batch_size = 16,
         locale="en",
