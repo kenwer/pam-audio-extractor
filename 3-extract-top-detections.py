@@ -41,7 +41,7 @@ def default_output_dir(csv_path: str) -> Path:
 def _config_defaults(script_path: Path) -> dict:
     """Read the script's section from config.toml next to the script.
 
-    Looks for a ``[<script-stem>]`` section, e.g. ``[extract-top-detections]``.
+    Looks for a ``[<script-stem>]`` section, e.g. ``[3-extract-top-detections]``.
     Returns an empty dict if the file or section does not exist.
     """
     import tomllib

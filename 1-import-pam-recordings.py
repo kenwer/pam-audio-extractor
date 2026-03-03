@@ -43,7 +43,7 @@ def print_version_info() -> None:
 def _config_defaults(script_path: Path) -> dict:
     """Read the script's section from config.toml next to the script.
 
-    Looks for a ``[<script-stem>]`` section, e.g. ``[import-pam-recordings]``.
+    Looks for a ``[<script-stem>]`` section, e.g. ``[1-import-pam-recordings]``.
     Returns an empty dict if the file or section does not exist.
     """
     import tomllib
