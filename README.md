@@ -65,7 +65,14 @@ Once running, it waits for SD cards to be inserted into the reader. The script d
   ```
 * CLI:
   ```shell
+  # with a manual species list
   ./2-analyze-pam-recordings.py /path/to/audio-recordings --species-filter-file ./custom_species_list.txt
+
+  # with geographic filtering (eBird-based occurrence model, week auto-detected from WAV metadata)
+  ./2-analyze-pam-recordings.py /path/to/audio-recordings --lat 48.52 --lon 9.05
+
+  # with geographic filtering, explicit week, and overlapping windows
+  ./2-analyze-pam-recordings.py /path/to/audio-recordings --lat 48.52 --lon 9.05 --week 14 --overlap 1.5
   ```
 
 Output is written to the specified output directory:
@@ -81,9 +88,18 @@ birdnet-detections_conf_0_25_2026_02_26/
 | Option | Default | Description |
 |---|---|---|
 | `audio_dir` | — | Root folder containing ARU subdirectories |
-| `--species-filter-file` | none | Species filter file (`Scientific name_Common name`, one per line) |
+| `--species-filter-file` | none | Species filter file (`Scientific name_Common name`, one per line). Ignored when `--lat`/`--lon` are set. |
 | `--min-conf` | `0.25` | Minimum confidence threshold (0–1) |
 | `--output` | auto-generated | Override output directory |
+| `--lat` | `-1` (off) | Recording location latitude. Enables geographic (eBird-like) species filtering; requires `--lon`. |
+| `--lon` | `-1` (off) | Recording location longitude. See `--lat`. |
+| `--week` | auto | Week of year [1–48] for seasonal filtering. Only used with `--lat`/`--lon`. Omit to auto-detect from WAV GUANO metadata (most common week across all files). Set `-1` to force year-round. |
+| `--overlap` | `0.0` | Overlap of prediction segments in seconds [0.0–2.9]. Higher values produce more detections at the cost of longer runtime. |
+
+> **Species filtering modes** — choose one:
+> - **Geographic (eBird-like):** provide `--lat`/`--lon`. BirdNET uses a built-in occurrence model to restrict analysis to species likely present at that location and season. `--species-filter-file` is ignored.
+> - **Manual list:** provide `--species-filter-file`, leave `--lat`/`--lon` at `-1`.
+> - **No filtering:** omit both — BirdNET checks all ~6,000 species.
 
 Species filter file format — one BirdNET label per line:
 ```

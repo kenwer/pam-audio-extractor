@@ -4,16 +4,20 @@
 # dependencies = [
 #   "birdnet-analyzer",
 #   "gooey",
+#   "guano",
 # ]
 # ///
 
 import argparse
 import csv
+import math
 import subprocess
 import sys
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
+import guano
 import birdnet_analyzer
 import birdnet_analyzer.config as birdnet_cfg
 
@@ -104,8 +108,50 @@ def parse_args() -> argparse.Namespace:
         **gui(widget="DirChooser"),
         help="Output directory (default: auto-generated)",
     )
+    settings.add_argument(
+        "--lat",
+        type=float,
+        default=cfg.get("lat", -1),
+        **gui(widget="DecimalField"),
+        help=(
+            "Recording location latitude. Enables geographic (eBird-like) species "
+            "filtering; requires --lon. Ignores --species-filter-file when set. "
+            "Set -1 to disable (default: -1)."
+        ),
+    )
+    settings.add_argument(
+        "--lon",
+        type=float,
+        default=cfg.get("lon", -1),
+        **gui(widget="DecimalField"),
+        help="Recording location longitude. See --lat. Set -1 to disable (default: -1).",
+    )
+    settings.add_argument(
+        "--week",
+        type=int,
+        default=cfg.get("week"),  # None = auto-detect, -1 = explicit year-round
+        metavar="WEEK",
+        **gui(widget="IntegerField"),
+        help=(
+            "Week of year [1-48] (4 weeks per month) for seasonal species filtering; "
+            "only used when --lat/--lon are set. "
+            "Omit to auto-detect from WAV GUANO metadata (most common week across all files). "
+            "Set -1 to force year-round species list."
+        ),
+    )
 
     advanced = parser.add_argument_group("Advanced")
+    advanced.add_argument(
+        "--overlap",
+        type=float,
+        default=cfg.get("overlap", 0.0),
+        metavar="OVERLAP",
+        **gui(widget="DecimalField"),
+        help=(
+            "Overlap of prediction segments in seconds [0.0, 2.9]. "
+            "Higher values produce more detections but increase runtime (default: 0.0)."
+        ),
+    )
     advanced.add_argument(
         "--version", action="store_true", help="Show version information and exit"
     )
@@ -151,6 +197,37 @@ def parse_recording_time(stem: str) -> datetime | None:
         return datetime.strptime(stem, "%Y%m%d_%H%M%S")
     except ValueError:
         return None
+
+
+def detect_predominant_week(audio_dir: str) -> int | None:
+    """Return the most common BirdNET week number [1, 48] across all WAV files
+    in *audio_dir*, or ``None`` if no GUANO timestamps could be read.
+
+    BirdNET divides the year into 48 weeks (4 per month):
+    week = (month - 1) * 4 + ceil(day / 7)
+    """
+    week_counts: Counter[int] = Counter()
+    for wav_path in Path(audio_dir).rglob("*.WAV"):
+        try:
+            ts = guano.GuanoFile(str(wav_path)).get("Timestamp")
+            if ts is not None:
+                week_counts[min(48, (ts.month - 1) * 4 + math.ceil(ts.day / 7))] += 1
+        except Exception:
+            pass
+
+    if not week_counts:
+        print("No GUANO timestamps found in WAV files; using week=-1 (year-round).", file=sys.stderr)
+        return None
+
+    modal_week, modal_count = week_counts.most_common(1)[0]
+    total = sum(week_counts.values())
+    weeks_seen = sorted(week_counts)
+    print(
+        f"Auto-detected week {modal_week} ({modal_count}/{total} recordings; "
+        f"weeks present: {weeks_seen[0]}–{weeks_seen[-1]})",
+        file=sys.stderr,
+    )
+    return modal_week
 
 
 def default_output_dir(min_conf: float) -> str:
@@ -249,8 +326,22 @@ def main() -> None:
 
     species_set: set[str] | None = None
     if args.species_filter_file:
-        species_set = load_species_filter(args.species_filter_file)
-        print(f"Loaded {len(species_set)} species from filter file.", file=sys.stderr)
+        if args.lat != -1 and args.lon != -1:
+            print(
+                "Warning: --species-filter-file is ignored when --lat/--lon are set. "
+                "BirdNET uses geographic (eBird-like) occurrence probabilities instead.",
+                file=sys.stderr,
+            )
+        else:
+            species_set = load_species_filter(args.species_filter_file)
+            print(f"Loaded {len(species_set)} species from filter file.", file=sys.stderr)
+
+    # week=None (omitted by user): auto-detect from GUANO when lat/lon are set
+    # week=-1   (explicitly set):  year-round (passed as-is to BirdNET)
+    # week=1-48 (explicitly set):  used directly
+    week = args.week
+    if week is None and args.lat != -1 and args.lon != -1:
+        week = detect_predominant_week(args.audio_dir)  # if None, BirdNET uses -1
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
@@ -269,6 +360,10 @@ def main() -> None:
         output=output_dir,
         min_conf=args.min_conf,
         slist=args.species_filter_file,
+        lat=args.lat,
+        lon=args.lon,
+        week=week,
+        overlap=args.overlap,
         rtype="csv",
         combine_results=True,
         #batch_size = 16,
