@@ -96,19 +96,30 @@ birdnet-detections_conf_0_25_2026_02_26/
 | `--week` | auto | Week of year [1–48] for seasonal filtering. Only used with `--lat`/`--lon`. Omit to auto-detect from WAV GUANO metadata (most common week across all files). Set `-1` to force year-round. |
 | `--overlap` | `0.0` | Overlap of prediction segments in seconds [0.0–2.9]. Higher values produce more detections at the cost of longer runtime. |
 
-> **Species filtering modes** — choose one:
-> - **Geographic (eBird-like):** provide `--lat`/`--lon`. BirdNET uses a built-in occurrence model to restrict analysis to species likely present at that location and season. `--species-filter-file` is ignored.
-> - **Manual list:** provide `--species-filter-file`, leave `--lat`/`--lon` at `-1`.
-> - **No filtering:** omit both — BirdNET checks all ~6,000 species.
+#### Species filtering
+The script allows to filter species according to this decision tree:
+```
+Are --lat and --lon provided?
+├─ YES: use geographic model (ignores --species-filter-file)
+│       is --week provided?
+│        ├─ YES: use specified week (or -1 for year-round)
+│        └─ NO:  auto-detect from WAV GUANO metadata (most common week)
+└─ NO:  is --species-filter-file provided?
+         ├─ YES: restrict analysis to the listed species
+         └─ NO:  analyse all ~6,000 species in the BirdNET model
+```
 
-Species filter file format — one BirdNET label per line:
+**Geographic model:** BirdNET bundles a TFLite model (checkpoints/V2.4/BirdNET_GLOBAL_6K_V2.4_MData_Model_V2_FP16.tflite) trained on eBird occurrence data that takes lat/lon/week as input and returns a per-species occurrence probability. Only species with a probability above a threshold (default 0.03) are included in the candidate species list that BirdNET searches for. It produces the same kind of location- and season-aware species list that tools like Chirpity offer via live eBird queries. See the [BirdNET-Analyzer discussion on species filtering](https://github.com/birdnet-team/BirdNET-Analyzer/discussions/234) for more detail.
+
+When `--lat`/`--lon` are set and `--week` is omitted, the week is auto-detected from the WAV GUANO metadata (most common week across all recordings).
+
+**Species filter file format** - one BirdNET label per line:
 ```
 # Target species
 Turdus merula_Eurasian Blackbird
 Porzana porzana_Spotted Crake
 Ardea cinerea_Grey Heron
 ```
-
 ---
 
 ### Step 3 — Extract top detections for review
