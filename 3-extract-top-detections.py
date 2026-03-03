@@ -67,59 +67,61 @@ def parse_args() -> argparse.Namespace:
     # --ignore-gooey pass when the actual work runs).
     cfg = _config_defaults(Path(__file__)) if USE_GUI and "--ignore-gooey" not in sys.argv else {}
 
-    settings = parser.add_argument_group(
-        "Options", **({"gooey_options": {"columns": 2}} if USE_GUI else {})
-    )
-    settings.add_argument(
+    required = parser.add_argument_group("Required")
+    required.add_argument(
         "detections_csv",
         **({} if USE_GUI else {"nargs": "?"}),
         **gui(widget="FileChooser", gooey_options={"full_width": True}),
         default=cfg.get("detections_csv") or None,
         help="Path to detections CSV",
     )
-    settings.add_argument(
+
+    optional = parser.add_argument_group(
+        "Optional", **({} if not USE_GUI else {"gooey_options": {"columns": 2}})
+    )
+    optional.add_argument(
         "--output",
         type=str,
         default=cfg.get("output") or None,
         **gui(widget="DirChooser", gooey_options={"full_width": True}),
         help="Output root directory (default: auto-generated)",
     )
-    settings.add_argument(
+    optional.add_argument(
         "--top-n",
         type=int,
         default=cfg.get("top_n", 10),
         **gui(widget="IntegerField"),
         help="Max snippets per (ARU, species) pair",
     )
-    settings.add_argument(
+    optional.add_argument(
         "--padding",
         type=float,
         default=cfg.get("padding", 3.0),
         **gui(widget="DecimalField"),
         help="Seconds of audio before/after detection window",
     )
-    settings.add_argument(
+    optional.add_argument(
         "--date-from",
         type=str,
         default=cfg.get("date_from") or None,
         **gui(widget="DateChooser"),
         help="Exclude recordings before this date (YYYY-MM-DD)",
     )
-    settings.add_argument(
+    optional.add_argument(
         "--date-to",
         type=str,
         default=cfg.get("date_to") or None,
         **gui(widget="DateChooser"),
         help="Exclude recordings after this date (YYYY-MM-DD)",
     )
-    settings.add_argument(
+    optional.add_argument(
         "--species-filter-file",
         dest="species_filter_file",
         default=cfg.get("species_filter_file") or None,
         **gui(widget="FileChooser", gooey_options={"full_width": True}),
         help="Path to species filter file (Scientific name_Common name, one per line)",
     )
-    settings.add_argument(
+    optional.add_argument(
         "--aru",
         action="append",
         dest="aru",
@@ -279,8 +281,6 @@ if USE_GUI:
         navigation="TABBED",
         show_stop_button=False,
         body_width=80,
-        required_cols=1,
-        optional_cols=2,
     )(main)
 
 if __name__ == "__main__":

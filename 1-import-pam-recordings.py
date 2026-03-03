@@ -307,30 +307,32 @@ def parse_args() -> argparse.Namespace:
         else {}
     )
 
-    settings = parser.add_argument_group(
-        "Options", **({"gooey_options": {"columns": 3}} if USE_GUI else {})
-    )
-    settings.add_argument(
+    required = parser.add_argument_group("Required")
+    required.add_argument(
         "target_dir",
         **({} if USE_GUI else {"nargs": "?"}),
         **gui(widget="DirChooser", gooey_options={"full_width": True}),
         default=cfg.get("target_dir") or None,
         help="Destination root folder where recordings are organised into per-card subdirectories",
     )
-    settings.add_argument(
+
+    optional = parser.add_argument_group(
+        "Optional", **({} if not USE_GUI else {"gooey_options": {"columns": 3}})
+    )
+    optional.add_argument(
         "--card-pattern",
         dest="card_pattern",
         default=cfg.get("card_pattern", "^MSD-"),
         help="Regular expression matched against the SD card volume name (case-insensitive, default: ^MSD-)",
     )
-    settings.add_argument(
+    optional.add_argument(
         "--overwrite",
         action="store_true",
         default=cfg.get("overwrite", False),
         **gui(widget="CheckBox"),
         help="Overwrite files that already exist in the destination (default: skip with warning)",
     )
-    settings.add_argument(
+    optional.add_argument(
         "--num-workers",
         dest="num_workers",
         type=int,
@@ -409,8 +411,6 @@ if USE_GUI:
         navigation="TABBED",
         show_stop_button=True,
         body_width=80,
-        required_cols=1,
-        optional_cols=3,
     )(main)
 
 if __name__ == "__main__":

@@ -77,15 +77,19 @@ def parse_args() -> argparse.Namespace:
     # --ignore-gooey pass when the actual work runs).
     cfg = _config_defaults(Path(__file__)) if USE_GUI and "--ignore-gooey" not in sys.argv else {}
 
-    settings = parser.add_argument_group("Options")
-    settings.add_argument(
+    required = parser.add_argument_group("Required")
+    required.add_argument(
         "audio_dir",
         **({} if USE_GUI else {"nargs": "?"}),
         **gui(widget="DirChooser", gooey_options={"full_width": True}),
         default=cfg.get("audio_dir") or None,
         help="Path to root folder containing ARU subdirs with .wav/.WAV files",
     )
-    settings.add_argument(
+
+    optional = parser.add_argument_group(
+        "Optional", **({} if not USE_GUI else {"gooey_options": {"columns": 3}})
+    )
+    optional.add_argument(
         "--min-conf",
         dest="min_conf",
         type=float,
@@ -93,7 +97,7 @@ def parse_args() -> argparse.Namespace:
         **gui(widget="DecimalField"),
         help="Minimum confidence threshold for detections (default: 0.25)",
     )
-    settings.add_argument(
+    optional.add_argument(
         "--top-n",
         dest="top_n",
         choices=["No limit"] + [str(i) for i in range(1, 21)],
@@ -104,20 +108,20 @@ def parse_args() -> argparse.Namespace:
             "No limit if omitted (default: no limit)."
         ),
     )
-    settings.add_argument(
+    optional.add_argument(
         "--output",
         default=cfg.get("output") or None,
         **gui(widget="DirChooser", gooey_options={"full_width": True}),
         help="Output directory (default: auto-generated)",
     )
-    settings.add_argument(
+    optional.add_argument(
         "--species-filter-file",
         dest="species_filter_file",
         default=cfg.get("species_filter_file") or None,
         **gui(widget="FileChooser", gooey_options={"full_width": True}),
         help="Path to species filter file",
     )
-    settings.add_argument(
+    optional.add_argument(
         "--lat",
         type=float,
         default=cfg.get("lat", -1),
@@ -128,7 +132,7 @@ def parse_args() -> argparse.Namespace:
             "Set -1 to disable (default: -1)."
         ),
     )
-    settings.add_argument(
+    optional.add_argument(
         "--lon",
         type=float,
         default=cfg.get("lon", -1),
@@ -136,7 +140,7 @@ def parse_args() -> argparse.Namespace:
         help="Recording location longitude. See --lat. Set -1 to disable (default: -1).",
     )
     _w = cfg.get("week")
-    settings.add_argument(
+    optional.add_argument(
         "--week",
         choices=["Auto", "Year-round"] + [str(i) for i in range(1, 49)],
         default="Auto" if _w is None else ("Year-round" if _w == -1 else str(_w)),
@@ -510,8 +514,6 @@ if USE_GUI:
         navigation="TABBED",
         show_stop_button=False,
         body_width=80,
-        required_cols=1,
-        optional_cols=3,
     )(main)
 
 if __name__ == "__main__":
