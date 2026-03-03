@@ -77,22 +77,13 @@ def parse_args() -> argparse.Namespace:
     # --ignore-gooey pass when the actual work runs).
     cfg = _config_defaults(Path(__file__)) if USE_GUI and "--ignore-gooey" not in sys.argv else {}
 
-    settings = parser.add_argument_group(
-        "Options", **({"gooey_options": {"columns": 1}} if USE_GUI else {})
-    )
+    settings = parser.add_argument_group("Options")
     settings.add_argument(
         "audio_dir",
         **({} if USE_GUI else {"nargs": "?"}),
-        **gui(widget="DirChooser"),
+        **gui(widget="DirChooser", gooey_options={"full_width": True}),
         default=cfg.get("audio_dir") or None,
         help="Path to root folder containing ARU subdirs with .wav/.WAV files",
-    )
-    settings.add_argument(
-        "--species-filter-file",
-        dest="species_filter_file",
-        default=cfg.get("species_filter_file") or None,
-        **gui(widget="FileChooser"),
-        help="Path to species filter file",
     )
     settings.add_argument(
         "--min-conf",
@@ -105,10 +96,8 @@ def parse_args() -> argparse.Namespace:
     settings.add_argument(
         "--top-n",
         dest="top_n",
-        type=int,
-        default=cfg.get("top_n") or None,
-        metavar="[1-4]",
-        **gui(widget="IntegerField"),
+        choices=["No limit"] + [str(i) for i in range(1, 21)],
+        default="No limit" if not cfg.get("top_n") else str(cfg.get("top_n")),
         help=(
             "Maximum number of detections per 3-second segment, ranked by confidence. "
             "1 keeps only the best match per window, 2 keeps the two best, etc. "
@@ -118,14 +107,21 @@ def parse_args() -> argparse.Namespace:
     settings.add_argument(
         "--output",
         default=cfg.get("output") or None,
-        **gui(widget="DirChooser"),
+        **gui(widget="DirChooser", gooey_options={"full_width": True}),
         help="Output directory (default: auto-generated)",
+    )
+    settings.add_argument(
+        "--species-filter-file",
+        dest="species_filter_file",
+        default=cfg.get("species_filter_file") or None,
+        **gui(widget="FileChooser", gooey_options={"full_width": True}),
+        help="Path to species filter file",
     )
     settings.add_argument(
         "--lat",
         type=float,
         default=cfg.get("lat", -1),
-        **gui(widget="DecimalField"),
+        **gui(widget="DecimalField", gooey_options={"min": -90, "initial_value": cfg.get("lat", -1)}),
         help=(
             "Recording location latitude. Enables geographic (eBird-like) species "
             "filtering; requires --lon. Ignores --species-filter-file when set. "
@@ -136,20 +132,19 @@ def parse_args() -> argparse.Namespace:
         "--lon",
         type=float,
         default=cfg.get("lon", -1),
-        **gui(widget="DecimalField"),
+        **gui(widget="DecimalField", gooey_options={"min": -180, "initial_value": cfg.get("lon", -1)}),
         help="Recording location longitude. See --lat. Set -1 to disable (default: -1).",
     )
+    _w = cfg.get("week")
     settings.add_argument(
         "--week",
-        type=int,
-        default=cfg.get("week"),  # None = auto-detect, -1 = explicit year-round
-        metavar="WEEK",
-        **gui(widget="IntegerField"),
+        choices=["Auto", "Year-round"] + [str(i) for i in range(1, 49)],
+        default="Auto" if _w is None else ("Year-round" if _w == -1 else str(_w)),
         help=(
             "Week of year [1-48] (4 weeks per month) for seasonal species filtering; "
             "only used when --lat/--lon are set. "
-            "Omit to auto-detect from WAV GUANO metadata (most common week across all files). "
-            "Set -1 to force year-round species list."
+            "Auto: detect from WAV GUANO metadata (most common week across all files). "
+            "Year-round: disable seasonal filtering."
         ),
     )
 
@@ -158,7 +153,6 @@ def parse_args() -> argparse.Namespace:
         "--overlap",
         type=float,
         default=cfg.get("overlap", 0.0),
-        metavar="OVERLAP",
         **gui(widget="DecimalField"),
         help=(
             "Overlap of prediction segments in seconds [0.0, 2.9]. "
@@ -407,9 +401,16 @@ def main() -> None:
     # week=None (omitted by user): auto-detect from GUANO when lat/lon are set
     # week=-1   (explicitly set):  year-round (passed as-is to BirdNET)
     # week=1-48 (explicitly set):  used directly
-    week = args.week
+    if args.week in (None, "Auto"):
+        week = None
+    elif args.week == "Year-round":
+        week = -1
+    else:
+        week = int(args.week)
     if week is None and args.lat != -1 and args.lon != -1:
         week = detect_predominant_week(args.audio_dir)  # if None, BirdNET uses -1
+
+    top_n = None if args.top_n in (None, "No limit") else int(args.top_n)
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
@@ -432,7 +433,7 @@ def main() -> None:
         lon=args.lon,
         week=week,
         overlap=args.overlap,
-        top_n=args.top_n,
+        top_n=top_n,
         rtype="csv",
         combine_results=True,
         #show_progress=True,  # suppresses per-file output; uncomment once available https://github.com/birdnet-team/BirdNET-Analyzer/pull/854
@@ -510,7 +511,7 @@ if USE_GUI:
         show_stop_button=False,
         body_width=80,
         required_cols=1,
-        required_rows=1,
+        optional_cols=3,
     )(main)
 
 if __name__ == "__main__":
