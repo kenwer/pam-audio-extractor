@@ -435,6 +435,7 @@ def main() -> None:
         top_n=args.top_n,
         rtype="csv",
         combine_results=True,
+        #show_progress=True,  # suppresses per-file output; uncomment once available https://github.com/birdnet-team/BirdNET-Analyzer/pull/854
         #batch_size = 16,
         locale="en",
         #use_perch = True,
