@@ -79,7 +79,9 @@ Output is written to the specified output directory:
 ```
 birdnet-detections_conf_0_25_2026_02_26/
   All-BirdNET-detections.csv          # enriched detections for all ARUs
-  BirdNET_Combined.csv                # raw BirdNET output
+  summary-per-aru.csv                 # detection count and max confidence per (ARU × species)
+  summary-all-arus.csv                # detection count and max confidence per species across all ARUs
+  BirdNET_CombinedTable.csv           # raw BirdNET output
   MSD-109/
     20260225_064500.BirdNET.results.csv
     ...

@@ -13,7 +13,7 @@ import csv
 import math
 import subprocess
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 
@@ -307,6 +307,61 @@ def validate_audio_dir(audio_dir: str) -> None:
         print(f"  {aru}: {count} file(s)", file=sys.stderr)
 
 
+def write_summary_tables(rows: list[dict], output_dir: str) -> None:
+    """Write per-ARU and global detection summary CSVs from the filtered detections.
+
+    Produces:
+      summary-per-aru.csv  — one row per (ARU x species), sorted by ARU then count desc
+      summary-all-arus.csv — one row per species across all ARUs, sorted by count desc
+    """
+    per_aru: dict[tuple, dict] = defaultdict(lambda: {"count": 0, "max_conf": 0.0, "scientific_name": ""})
+    for row in rows:
+        key = (row["aru_number"], row["species"])
+        per_aru[key]["count"] += 1
+        per_aru[key]["max_conf"] = max(per_aru[key]["max_conf"], float(row["confidence"]))
+        per_aru[key]["scientific_name"] = row["scientific_name"]
+
+    per_aru_path = str(Path(output_dir) / "summary-per-aru.csv")
+    with open(per_aru_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f, fieldnames=["aru_number", "species", "scientific_name", "detection_count", "max_confidence"]
+        )
+        writer.writeheader()
+        for (aru, species), data in sorted(per_aru.items(), key=lambda x: (x[0][0], -x[1]["count"])):
+            writer.writerow({
+                "aru_number": aru,
+                "species": species,
+                "scientific_name": data["scientific_name"],
+                "detection_count": data["count"],
+                "max_confidence": f"{data['max_conf']:.4f}",
+            })
+
+    global_agg: dict[str, dict] = defaultdict(lambda: {"count": 0, "max_conf": 0.0, "arus": set(), "scientific_name": ""})
+    for (aru, species), data in per_aru.items():
+        global_agg[species]["count"] += data["count"]
+        global_agg[species]["max_conf"] = max(global_agg[species]["max_conf"], data["max_conf"])
+        global_agg[species]["arus"].add(aru)
+        global_agg[species]["scientific_name"] = data["scientific_name"]
+
+    global_path = str(Path(output_dir) / "summary-all-arus.csv")
+    with open(global_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f, fieldnames=["species", "scientific_name", "total_detections", "max_confidence", "aru_count"]
+        )
+        writer.writeheader()
+        for species, data in sorted(global_agg.items(), key=lambda x: -x[1]["count"]):
+            writer.writerow({
+                "species": species,
+                "scientific_name": data["scientific_name"],
+                "total_detections": data["count"],
+                "max_confidence": f"{data['max_conf']:.4f}",
+                "aru_count": len(data["arus"]),
+            })
+
+    print(f"  Per-ARU summary : {per_aru_path}", file=sys.stderr)
+    print(f"  Global summary  : {global_path}", file=sys.stderr)
+
+
 def main() -> None:
     """Entry point: run BirdNET-Analyzer and write an enriched detections CSV."""
     args = parse_args()
@@ -388,7 +443,7 @@ def main() -> None:
         "recording_time",
     ]
 
-    total_detections = 0
+    detections: list[dict] = []
 
     with (
         open(combined_csv, newline="", encoding="utf-8") as infile,
@@ -409,7 +464,7 @@ def main() -> None:
             aru_number: str = file_path.parent.name
             recording_time: datetime | None = parse_recording_time(file_path.stem)
 
-            writer.writerow({
+            detection = {
                 "file": row["File"],
                 "aru_number": aru_number,
                 "species": row["Common name"],
@@ -418,13 +473,15 @@ def main() -> None:
                 "start_time": row["Start (s)"],
                 "end_time": row["End (s)"],
                 "recording_time": str(recording_time) if recording_time else "",
-            })
-            total_detections += 1
+            }
+            writer.writerow(detection)
+            detections.append(detection)
 
     print(file=sys.stderr)
-    print(f"Total detections: {total_detections}", file=sys.stderr)
+    print(f"Total detections: {len(detections)}", file=sys.stderr)
     print(f"  Output dir    : {output_dir}/", file=sys.stderr)
     print(f"  Detections CSV: {csv_output_path}", file=sys.stderr)
+    write_summary_tables(detections, output_dir)
 
 
 if USE_GUI:
