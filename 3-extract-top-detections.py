@@ -280,7 +280,7 @@ if USE_GUI:
         show_stop_button=False,
         body_width=80,
         required_cols=1,
-        required_rows=1,
+        optional_cols=2,
     )(main)
 
 if __name__ == "__main__":
