@@ -103,6 +103,19 @@ def parse_args() -> argparse.Namespace:
         help="Minimum confidence threshold for detections (default: 0.25)",
     )
     settings.add_argument(
+        "--top-n",
+        dest="top_n",
+        type=int,
+        default=cfg.get("top_n") or None,
+        metavar="[1-4]",
+        **gui(widget="IntegerField"),
+        help=(
+            "Maximum number of detections per 3-second segment, ranked by confidence. "
+            "1 keeps only the best match per window, 2 keeps the two best, etc. "
+            "No limit if omitted (default: no limit)."
+        ),
+    )
+    settings.add_argument(
         "--output",
         default=cfg.get("output") or None,
         **gui(widget="DirChooser"),
@@ -419,6 +432,7 @@ def main() -> None:
         lon=args.lon,
         week=week,
         overlap=args.overlap,
+        top_n=args.top_n,
         rtype="csv",
         combine_results=True,
         #batch_size = 16,
@@ -458,6 +472,8 @@ def main() -> None:
             label: str = f"{scientific_name}_{row['Common name']}"
 
             if species_set is not None and label not in species_set:
+                continue
+            if float(row["Confidence"]) < args.min_conf:
                 continue
 
             file_path = Path(row["File"])

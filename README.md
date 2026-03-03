@@ -73,6 +73,9 @@ Once running, it waits for SD cards to be inserted into the reader. The script d
 
   # with geographic filtering, explicit week, and overlapping windows
   ./2-analyze-pam-recordings.py /path/to/audio-recordings --lat 48.52 --lon 9.05 --week 14 --overlap 1.5
+
+  # keep only the single best detection per 3-second window (suppresses spurious secondary matches)
+  ./2-analyze-pam-recordings.py /path/to/audio-recordings --lat 48.52 --lon 9.05 --top-n 1
   ```
 
 Output is written to the specified output directory:
@@ -92,6 +95,7 @@ birdnet-detections_conf_0_25_2026_02_26/
 | `audio_dir` | — | Root folder containing ARU subdirectories |
 | `--species-filter-file` | none | Species filter file (`Scientific name_Common name`, one per line). Ignored when `--lat`/`--lon` are set. |
 | `--min-conf` | `0.25` | Minimum confidence threshold (0–1) |
+| `--top-n` | no limit | Maximum detections per 3-second segment [1–4], ranked by confidence. Useful to suppress low-ranked secondary matches that are usually incorrect. |
 | `--output` | auto-generated | Override output directory |
 | `--lat` | `-1` (off) | Recording location latitude. Enables geographic (eBird-like) species filtering; requires `--lon`. |
 | `--lon` | `-1` (off) | Recording location longitude. See `--lat`. |
