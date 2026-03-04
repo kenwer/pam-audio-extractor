@@ -20,8 +20,8 @@ jobs:
             name: macOS
           - os: windows-latest
             name: Windows
-          # - os: ubuntu-latest
-          #   name: Linux
+          - os: ubuntu-latest
+            name: Linux
 
     steps:
       - name: Checkout
@@ -44,6 +44,16 @@ jobs:
         with:
           path: packaging/.birdnet-checkpoints
           key: birdnet-checkpoints-${{ hashFiles('2-analyze-pam-recordings.py.lock') }}
+
+      # wxpython (pulled in by gooey) has no pre-built Linux wheel for Python 3.13, so uv tries to build it from source
+      - name: Install GTK+ build dependencies (Linux only)
+        if: matrix.name == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-3-dev libpng-dev libjpeg-dev libtiff-dev \
+            libsdl2-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libwebkit2gtk-4.1-dev libnotify-dev libsm-dev
 
       - name: Build distributables
         run: uv run --script packaging/build.py
