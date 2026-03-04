@@ -125,7 +125,7 @@ def parse_args() -> argparse.Namespace:
     optional.add_argument(
         "--padding",
         type=float,
-        default=cfg.get("padding", 3.0),
+        default=cfg.get("padding", 1.5),
         **gui(widget="DecimalField"),
         help="Seconds of audio before/after detection window",
     )

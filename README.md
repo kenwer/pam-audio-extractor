@@ -149,7 +149,7 @@ MSD-109_-_Turdus merula_Eurasian Blackbird_-top1-_-_01_conf0.8014_20260225_06450
 |---|---|---|
 | `detections_csv` | — | Path to `All-BirdNET-detections.csv` |
 | `--top-n` | `10` | Max snippets per (ARU, species) pair, ranked by confidence |
-| `--padding` | `3.0` | Seconds of audio before/after each detection window |
+| `--padding` | `1.5` | Seconds of audio before/after each detection window |
 | `--output` | `<audio_dir>/top-detection-snippets` | Override output directory |
 | `--species-filter-file` | none | Species filter file |
 | `--aru` | all | Restrict to specific ARUs (repeatable) |
