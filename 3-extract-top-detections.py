@@ -300,7 +300,7 @@ def main() -> None:
             rec_dt = _recording_datetime(row)
             ts_str = rec_dt.strftime("%Y%m%d_%H%M%S") if rec_dt else "unknown"
 
-            filename = f"{aru}_-_{species_key}_-_{rank:02d}_conf{confidence:.4f}_{ts_str}_{start_t}-{end_t}.wav"
+            filename = f"{aru}_-_{species_key}_-_top{rank}_-_{rank:02d}_conf{confidence:.4f}_-_{ts_str}_-_{start_t}_-_{end_t}.wav"
             out_path = output_dir / filename
 
             try:
