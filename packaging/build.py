@@ -130,12 +130,11 @@ def build(appname: str) -> None:
     if appname == "2-analyze-pam-recordings":
         cmd += ["--collect-data", "birdnet_analyzer"]
         if sys.platform == "win32":
-            # TensorFlow requires msvcp140*.dll (Visual C++ Redistributable) but
-            # PyInstaller's TF hook doesn't bundle them since they live in System32,
-            # not in TF's package directory. Bundle them explicitly.
-            system32 = Path(os.environ.get("SystemRoot", "C:/Windows")) / "System32"
-            for dll in system32.glob("msvcp140*.dll"):
-                cmd += ["--add-binary", f"{dll};."]
+            # TensorFlow's self_check.py verifies its DLLs via ctypes.WinDLL(),
+            # which searches %PATH%. With --onefile, _MEIPASS isn't in PATH so
+            # the check fails even though the DLLs are present in the bundle.
+            # This runtime hook prepends _MEIPASS to PATH before any imports run.
+            cmd += ["--runtime-hook", PACKAGING_DIR / "rthook_win_dll_path.py"]
     cmd.append(script)
     run(cmd, env=venv_env)
 
