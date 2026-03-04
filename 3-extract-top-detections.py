@@ -35,7 +35,16 @@ def print_version_info() -> None:
             print("Warning: Unable to list installed packages", file=sys.stderr)
 
 
-def default_output_dir(csv_path: str) -> Path:
+def default_output_dir(csv_path: str, rows: list[dict] | None = None) -> Path:
+    """Return the default output directory for extracted snippets.
+
+    Prefers placing snippets next to the source audio (derived from the ``file``
+    column of the first detection row).  Falls back to the directory containing
+    the detections CSV when no rows are available.
+    """
+    if rows:
+        audio_root = Path(rows[0]["file"]).parent.parent
+        return audio_root / "top-detection-snippets"
     return Path(csv_path).parent / "top-detection-snippets"
 
 
@@ -88,7 +97,7 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=cfg.get("output") or None,
         **gui(widget="DirChooser", gooey_options={"full_width": True}),
-        help="Output root directory (default: auto-generated)",
+        help="Output root directory (default: top-detection-snippets/ next to the source audio recordings)",
     )
     optional.add_argument(
         "--top-n",
@@ -267,9 +276,8 @@ def main() -> None:
         print(f"error: --species-filter-file not found: {args.species_filter_file}", file=sys.stderr)
         sys.exit(1)
 
-    output_dir = Path(args.output) if args.output else default_output_dir(args.detections_csv)
-
     rows = load_detections(args.detections_csv)
+    output_dir = Path(args.output) if args.output else default_output_dir(args.detections_csv, rows)
     rows = apply_filters(rows, args)
 
     # Group by (aru_number, species_key)

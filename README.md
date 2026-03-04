@@ -140,9 +140,9 @@ Ardea cinerea_Grey Heron
   ./3-extract-top-detections.py birdnet-detections_conf_0_25_2026_02_26/All-BirdNET-detections.csv
   ```
 
-Snippets are written to the specified output directory. Each filename encodes ARU, species, rank, confidence, timestamp, and detection window:
+Snippets are written to `top-detection-snippets/` next to the source audio recordings. Each filename encodes ARU, species, rank, confidence, timestamp, and detection window:
 ```
-MSD-109_-_Turdus merula_Eurasian Blackbird_-_01_conf0.8014_20260225_064500_6.0-9.0.wav
+MSD-109_-_Turdus merula_Eurasian Blackbird_-top1-_-_01_conf0.8014_20260225_064500_6.0-9.0.wav
 ```
 
 | Option | Default | Description |
@@ -150,7 +150,7 @@ MSD-109_-_Turdus merula_Eurasian Blackbird_-_01_conf0.8014_20260225_064500_6.0-9
 | `detections_csv` | — | Path to `All-BirdNET-detections.csv` |
 | `--top-n` | `10` | Max snippets per (ARU, species) pair, ranked by confidence |
 | `--padding` | `3.0` | Seconds of audio before/after each detection window |
-| `--output` | `<csv_dir>/top-detections` | Override output directory |
+| `--output` | `<audio_dir>/top-detection-snippets` | Override output directory |
 | `--species-filter-file` | none | Species filter file |
 | `--aru` | all | Restrict to specific ARUs (repeatable) |
 | `--date-from` / `--date-to` | none | Date range filter (`YYYY-MM-DD`) |
