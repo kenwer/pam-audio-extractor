@@ -27,6 +27,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set VERSION
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            echo "VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
+          else
+            echo "VERSION=dev" >> $GITHUB_ENV
+          fi
+
       - name: Install uv
         uses: astral-sh/setup-uv@v6
 
@@ -55,15 +64,19 @@ jobs:
           cd packaging/dist
           if [[ "${{ matrix.name }}" == "macOS" ]]; then
             for app in *.app; do
-              zip -r "${app%.app}-macOS.zip" "$app"
-              gh release upload "${{ github.ref_name }}" "${app%.app}-macOS.zip" --clobber
+              versioned="${app%.app}-${VERSION}-macOS.zip"
+              zip -r "$versioned" "$app"
+              gh release upload "${{ github.ref_name }}" "$versioned" --clobber
             done
           elif [[ "${{ matrix.name }}" == "Windows" ]]; then
             for exe in *.exe; do
-              gh release upload "${{ github.ref_name }}" "$exe" --clobber
+              versioned="${exe%.exe}-${VERSION}-windows-x86_64.exe"
+              mv "$exe" "$versioned"
+              gh release upload "${{ github.ref_name }}" "$versioned" --clobber
             done
           else
             for f in *; do
-              [[ -f "$f" ]] && mv "$f" "${f}-Linux" && gh release upload "${{ github.ref_name }}" "${f}-Linux" --clobber
+              versioned="${f}-${VERSION}-Linux"
+              [[ -f "$f" ]] && mv "$f" "$versioned" && gh release upload "${{ github.ref_name }}" "$versioned" --clobber
             done
           fi
