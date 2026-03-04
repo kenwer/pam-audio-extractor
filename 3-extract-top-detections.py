@@ -36,7 +36,7 @@ def print_version_info() -> None:
 
 
 def default_output_dir(csv_path: str) -> Path:
-    return Path(csv_path).parent / "top-detections"
+    return Path(csv_path).parent / "top-detection-snippets"
 
 
 def _config_defaults(script_path: Path) -> dict:
