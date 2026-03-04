@@ -11,6 +11,7 @@
 import argparse
 import csv
 import math
+import multiprocessing
 import os
 import subprocess
 import sys
@@ -52,7 +53,10 @@ def _config_defaults(script_path: Path) -> dict:
     """
     import tomllib
 
-    config_path = script_path.parent / "config.toml"
+    if getattr(sys, "frozen", False):
+        config_path = Path(sys.executable).parent / "config.toml"
+    else:
+        config_path = script_path.parent / "config.toml"
     if not config_path.exists():
         return {}
     with open(config_path, "rb") as f:
@@ -527,4 +531,5 @@ if USE_GUI:
     )(main)
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     main()

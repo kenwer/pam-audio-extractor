@@ -1,0 +1,63 @@
+name: Build Distributables
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: macos-latest
+            name: macOS
+          - os: windows-latest
+            name: Windows
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Cache BirdNET checkpoints
+        uses: actions/cache@v4
+        with:
+          path: packaging/.birdnet-checkpoints
+          key: birdnet-checkpoints-${{ hashFiles('2-analyze-pam-recordings.py.lock') }}
+
+      - name: Build distributables
+        run: uv run --script packaging/build.py
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.name }}
+          path: packaging/dist/
+          if-no-files-found: error
+
+      - name: Upload release assets
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd packaging/dist
+          if [[ "${{ matrix.name }}" == "macOS" ]]; then
+            for app in *.app; do
+              zip -r "${app%.app}-macOS.zip" "$app"
+              gh release upload "${{ github.ref_name }}" "${app%.app}-macOS.zip" --clobber
+            done
+          else
+            for exe in *.exe; do
+              gh release upload "${{ github.ref_name }}" "$exe" --clobber
+            done
+          fi
