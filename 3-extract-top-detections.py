@@ -142,12 +142,19 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_detections(csv_path: str) -> list[dict]:
-    rows = []
-    with open(csv_path, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            rows.append(row)
-    return rows
+    try:
+        with open(csv_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            return list(reader)
+    except FileNotFoundError:
+        print(f"error: detections CSV not found: {csv_path}", file=sys.stderr)
+        sys.exit(1)
+    except PermissionError:
+        print(f"error: cannot read detections CSV (permission denied): {csv_path}", file=sys.stderr)
+        sys.exit(1)
+    except UnicodeDecodeError:
+        print(f"error: detections CSV is not valid UTF-8: {csv_path}", file=sys.stderr)
+        sys.exit(1)
 
 
 def _flatten(values: list[str] | None) -> list[str] | None:
@@ -274,13 +281,21 @@ def main() -> None:
 
     total_snippets = 0
     for (aru, species_key), group_rows in groups.items():
-        group_rows.sort(key=lambda r: float(r["confidence"]), reverse=True)
+        try:
+            group_rows.sort(key=lambda r: float(r["confidence"]), reverse=True)
+        except (ValueError, KeyError) as e:
+            print(f"Warning: Skipping group ({aru}, {species_key}): bad confidence value: {e}", file=sys.stderr)
+            continue
         top_rows = group_rows[: args.top_n]
 
         for rank, row in enumerate(top_rows, start=1):
-            confidence = float(row["confidence"])
-            start_t = float(row["start_time"])
-            end_t = float(row["end_time"])
+            try:
+                confidence = float(row["confidence"])
+                start_t = float(row["start_time"])
+                end_t = float(row["end_time"])
+            except (ValueError, KeyError) as e:
+                print(f"Warning: Skipping row (aru={aru}, rank={rank}): bad numeric value: {e}", file=sys.stderr)
+                continue
 
             rec_dt = _recording_datetime(row)
             ts_str = rec_dt.strftime("%Y%m%d_%H%M%S") if rec_dt else "unknown"
