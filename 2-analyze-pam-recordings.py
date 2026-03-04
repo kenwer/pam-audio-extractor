@@ -13,6 +13,7 @@ import csv
 import math
 import multiprocessing
 import os
+import re
 import subprocess
 import sys
 from collections import Counter, defaultdict
@@ -207,19 +208,22 @@ def load_species_filter(filter_path: str | Path) -> set[str]:
 def parse_recording_time(stem: str) -> datetime | None:
     """Parse a recording timestamp from an ARU filename stem.
 
-    Expects the format ``YYYYMMDD_HHMMSS`` (e.g. ``20260224_011000``).
+    Searches for a ``YYYYMMDD_HHMMSS`` pattern anywhere in the stem to handle
+    device-prefixed filenames (e.g. ``242A260564877EC4_20260225_091501``).
 
     Args:
         stem: The filename stem (without extension).
 
     Returns:
-        A :class:`datetime` object, or ``None`` if the stem does not match
-        the expected pattern.
+        A :class:`datetime` object, or ``None`` if no matching pattern is found.
     """
-    try:
-        return datetime.strptime(stem, "%Y%m%d_%H%M%S")
-    except ValueError:
-        return None
+    match = re.search(r"(\d{8}_\d{6})", stem)
+    if match:
+        try:
+            return datetime.strptime(match.group(1), "%Y%m%d_%H%M%S")
+        except ValueError:
+            pass
+    return None
 
 
 def detect_predominant_week(audio_dir: str) -> int | None:

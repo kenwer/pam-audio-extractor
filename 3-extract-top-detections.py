@@ -10,6 +10,7 @@
 
 import argparse
 import csv
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -191,11 +192,15 @@ def apply_filters(rows: list[dict], args: argparse.Namespace) -> list[dict]:
             continue
 
         if date_from or date_to:
-            rec_date = datetime.fromisoformat(row["recording_time"]).date()
-            if date_from and rec_date < date_from:
-                continue
-            if date_to and rec_date > date_to:
-                continue
+            rec_dt = _recording_datetime(row)
+            if rec_dt is None:
+                print(f"Warning: Cannot determine recording date for {row.get('file', '?')!r}, skipping date filter", file=sys.stderr)
+            else:
+                rec_date = rec_dt.date()
+                if date_from and rec_date < date_from:
+                    continue
+                if date_to and rec_date > date_to:
+                    continue
 
         species_key = f"{row['scientific_name']}_{row['species']}"
         if allowed_species and species_key not in allowed_species:
@@ -204,6 +209,27 @@ def apply_filters(rows: list[dict], args: argparse.Namespace) -> list[dict]:
         filtered.append(row)
 
     return filtered
+
+
+def _recording_datetime(row: dict) -> datetime | None:
+    """Return the recording datetime for a row.
+
+    Tries the ``recording_time`` column first, then falls back to parsing
+    the ``YYYYMMDD_HHMMSS`` pattern from the audio filename.
+    """
+    rec_time_str = row.get("recording_time", "").strip()
+    if rec_time_str:
+        try:
+            return datetime.fromisoformat(rec_time_str)
+        except ValueError:
+            pass
+    m = re.search(r"(\d{8}_\d{6})", Path(row["file"]).stem)
+    if m:
+        try:
+            return datetime.strptime(m.group(1), "%Y%m%d_%H%M%S")
+        except ValueError:
+            pass
+    return None
 
 
 def extract_snippet(row: dict, padding: float, out_path: Path) -> None:
@@ -253,23 +279,20 @@ def main() -> None:
 
         for rank, row in enumerate(top_rows, start=1):
             confidence = float(row["confidence"])
-
-            # Skip rows with empty or invalid recording_time
-            rec_time_str = row["recording_time"]
-            if not isinstance(rec_time_str, str) or rec_time_str.strip() == "":
-                print(f"Warning: Skipping row with empty recording time (aru={row['aru_number']}, species_key=...)", file=sys.stderr)
-                continue
-
-            # Parse recording timestamp for filename
-            rec_time = datetime.fromisoformat(rec_time_str)
-            ts_str = rec_time.strftime("%Y%m%d_%H%M%S")
             start_t = float(row["start_time"])
             end_t = float(row["end_time"])
+
+            rec_dt = _recording_datetime(row)
+            ts_str = rec_dt.strftime("%Y%m%d_%H%M%S") if rec_dt else "unknown"
+
             filename = f"{aru}_-_{species_key}_-_{rank:02d}_conf{confidence:.4f}_{ts_str}_{start_t}-{end_t}.wav"
             out_path = output_dir / filename
 
-            extract_snippet(row, args.padding, out_path)
-            total_snippets += 1
+            try:
+                extract_snippet(row, args.padding, out_path)
+                total_snippets += 1
+            except Exception as e:
+                print(f"Warning: Skipping {filename}: {e}", file=sys.stderr)
 
     print(f"Groups processed : {len(groups)}")
     print(f"Snippets written : {total_snippets}")
