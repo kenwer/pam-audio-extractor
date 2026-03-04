@@ -439,8 +439,7 @@ def main() -> None:
 
     # Runs BirdNET on every audio file found recursively under audio_dir.
     # Per-file results (*.BirdNET.results.csv) are written to output_dir,
-    # mirroring the subdirectory structure of audio_dir. 
-    # combine_results=True also writes a single BirdNET_CombinedTable.csv there.
+    # mirroring the subdirectory structure of audio_dir.
     # slist: pre-filters detections to the species in the filter file during
     # analysis (hopefully more efficient than post-filtering). Has no effect when lat/lon
     # are provided — in that case BirdNET uses the geographic species model instead.
@@ -456,7 +455,7 @@ def main() -> None:
         overlap=args.overlap,
         top_n=top_n,
         rtype="csv",
-        combine_results=True,
+        combine_results=False,
         threads=num_threads,
         #show_progress=True,  # suppresses per-file output; uncomment once available https://github.com/birdnet-team/BirdNET-Analyzer/pull/854
         #batch_size = 16,
@@ -464,11 +463,22 @@ def main() -> None:
         #use_perch = True,
     )
 
-    combined_csv = Path(output_dir) / birdnet_cfg.OUTPUT_CSV_FILENAME # "BirdNET_Combined.csv"
+    result_csvs = sorted(Path(output_dir).rglob("*.BirdNET.results.csv"))
 
-    if not combined_csv.exists():
+    if not result_csvs:
         print("No detections found.", file=sys.stderr)
         return
+
+    # Run-level context columns sourced directly from args/birdnet_cfg.
+    # week is -1 when year-round (BirdNET sentinel); None means auto-detect failed.
+    run_context = {
+        "lat": args.lat,
+        "lon": args.lon,
+        "week": week if week is not None else -1,
+        "species_list": args.species_filter_file or "",
+        "min_conf": args.min_conf,
+        "model": os.path.basename(birdnet_cfg.MODEL_PATH),
+    }
 
     fieldnames = [
         "file",
@@ -479,43 +489,43 @@ def main() -> None:
         "start_time",
         "end_time",
         "recording_time",
+        *run_context.keys(),
     ]
 
     detections: list[dict] = []
 
-    with (
-        open(combined_csv, newline="", encoding="utf-8") as infile,
-        open(csv_output_path, "w", newline="", encoding="utf-8") as outfile,
-    ):
-        reader = csv.DictReader(infile)
+    with open(csv_output_path, "w", newline="", encoding="utf-8") as outfile:
         writer = csv.DictWriter(outfile, fieldnames=fieldnames)
         writer.writeheader()
 
-        for row in reader:
-            scientific_name: str = row["Scientific name"]
-            label: str = f"{scientific_name}_{row['Common name']}"
+        for result_csv in result_csvs:
+            with open(result_csv, newline="", encoding="utf-8") as infile:
+                for row in csv.DictReader(infile):
+                    scientific_name: str = row["Scientific name"]
+                    label: str = f"{scientific_name}_{row['Common name']}"
 
-            if species_set is not None and label not in species_set:
-                continue
-            if float(row["Confidence"]) < args.min_conf:
-                continue
+                    if species_set is not None and label not in species_set:
+                        continue
+                    if float(row["Confidence"]) < args.min_conf:
+                        continue
 
-            file_path = Path(row["File"])
-            aru_number: str = file_path.parent.name
-            recording_time: datetime | None = parse_recording_time(file_path.stem)
+                    file_path = Path(row["File"])
+                    aru_number: str = file_path.parent.name
+                    recording_time: datetime | None = parse_recording_time(file_path.stem)
 
-            detection = {
-                "file": row["File"],
-                "aru_number": aru_number,
-                "species": row["Common name"],
-                "scientific_name": scientific_name,
-                "confidence": row["Confidence"],
-                "start_time": row["Start (s)"],
-                "end_time": row["End (s)"],
-                "recording_time": str(recording_time) if recording_time else "",
-            }
-            writer.writerow(detection)
-            detections.append(detection)
+                    detection = {
+                        "file": row["File"],
+                        "aru_number": aru_number,
+                        "species": row["Common name"],
+                        "scientific_name": scientific_name,
+                        "confidence": row["Confidence"],
+                        "start_time": row["Start (s)"],
+                        "end_time": row["End (s)"],
+                        "recording_time": str(recording_time) if recording_time else "",
+                        **run_context,
+                    }
+                    writer.writerow(detection)
+                    detections.append(detection)
 
     print(file=sys.stderr)
     print(f"Total detections: {len(detections)}", file=sys.stderr)
