@@ -129,6 +129,13 @@ def build(appname: str) -> None:
         cmd += ["--onefile"]        # single .exe on Windows
     if appname == "2-analyze-pam-recordings":
         cmd += ["--collect-data", "birdnet_analyzer"]
+        if sys.platform == "win32":
+            # TensorFlow requires msvcp140*.dll (Visual C++ Redistributable) but
+            # PyInstaller's TF hook doesn't bundle them since they live in System32,
+            # not in TF's package directory. Bundle them explicitly.
+            system32 = Path(os.environ.get("SystemRoot", "C:/Windows")) / "System32"
+            for dll in system32.glob("msvcp140*.dll"):
+                cmd += ["--add-binary", f"{dll};."]
     cmd.append(script)
     run(cmd, env=venv_env)
 
