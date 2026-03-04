@@ -101,10 +101,11 @@ def parse_args() -> argparse.Namespace:
     )
     optional.add_argument(
         "--top-n",
-        type=int,
-        default=cfg.get("top_n", 10),
-        **gui(widget="IntegerField"),
-        help="Max snippets per (ARU, species) pair",
+        dest="top_n",
+        choices=["No limit"] + [str(i) for i in range(1, 21)],
+        default=str(cfg.get("top_n", 10)),
+        **gui(widget="Dropdown"),
+        help="Max snippets per (ARU, species) pair (default: No limit)",
     )
     optional.add_argument(
         "--padding",
@@ -276,6 +277,8 @@ def main() -> None:
         print(f"error: --species-filter-file not found: {args.species_filter_file}", file=sys.stderr)
         sys.exit(1)
 
+    top_n = None if args.top_n in (None, "No limit") else int(args.top_n)
+
     rows = load_detections(args.detections_csv)
     output_dir = Path(args.output) if args.output else default_output_dir(args.detections_csv, rows)
     rows = apply_filters(rows, args)
@@ -294,7 +297,7 @@ def main() -> None:
         except (ValueError, KeyError) as e:
             print(f"Warning: Skipping group ({aru}, {species_key}): bad confidence value: {e}", file=sys.stderr)
             continue
-        top_rows = group_rows[: args.top_n]
+        top_rows = group_rows[:top_n]
 
         for rank, row in enumerate(top_rows, start=1):
             try:
