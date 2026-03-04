@@ -20,6 +20,8 @@ jobs:
             name: macOS
           - os: windows-latest
             name: Windows
+          - os: ubuntu-latest
+            name: Linux
 
     steps:
       - name: Checkout
@@ -56,8 +58,12 @@ jobs:
               zip -r "${app%.app}-macOS.zip" "$app"
               gh release upload "${{ github.ref_name }}" "${app%.app}-macOS.zip" --clobber
             done
-          else
+          elif [[ "${{ matrix.name }}" == "Windows" ]]; then
             for exe in *.exe; do
               gh release upload "${{ github.ref_name }}" "$exe" --clobber
+            done
+          else
+            for f in *; do
+              [[ -f "$f" ]] && mv "$f" "${f}-Linux" && gh release upload "${{ github.ref_name }}" "${f}-Linux" --clobber
             done
           fi
