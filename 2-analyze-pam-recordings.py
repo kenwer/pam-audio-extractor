@@ -29,6 +29,20 @@ if USE_GUI:
     from gooey import Gooey, GooeyParser
 
 
+def open_native_file_manager(path: str) -> None:
+    """Open a folder in the native file manager (Finder, Explorer, Nautilus)."""
+    path = os.path.normpath(path)
+    try:
+        if sys.platform == "win32":
+            subprocess.Popen(["explorer", path])
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", path])
+        else:
+            subprocess.Popen(["xdg-open", path])
+    except Exception:
+        pass
+
+
 def print_version_info() -> None:
     """Print version information for Python and installed packages."""
     print(f"Python executable:  {sys.executable}")
@@ -175,6 +189,14 @@ def parse_args() -> argparse.Namespace:
         choices=["Auto"] + [str(i) for i in [1, 2, 4, 8, 16, 32, 64, 128, 256]],
         default="Auto" if not cfg.get("num_threads") else str(cfg.get("num_threads")),
         help="Number of CPU threads for parallel file analysis (default: auto-detect via os.cpu_count())",
+    )
+    advanced.add_argument(
+        "--no-reveal",
+        dest="no_reveal",
+        action="store_true",
+        default=cfg.get("no_reveal", False),
+        **gui(widget="CheckBox"),
+        help="Do not open the output folder in the file manager when done",
     )
     advanced.add_argument(
         "--version", action="store_true", help="Show version information and exit"
@@ -565,6 +587,8 @@ def main() -> None:
     print(f"  Output dir    : {output_dir}/", file=sys.stderr)
     print(f"  Detections CSV: {csv_output_path}", file=sys.stderr)
     write_summary_tables(detections, output_dir)
+    if not args.no_reveal:
+        open_native_file_manager(output_dir)
 
 
 if USE_GUI:

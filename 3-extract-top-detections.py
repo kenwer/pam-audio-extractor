@@ -10,6 +10,7 @@
 
 import argparse
 import csv
+import os
 import re
 import subprocess
 import sys
@@ -19,6 +20,20 @@ from pathlib import Path
 USE_GUI = len(sys.argv) == 1 or "--ignore-gooey" in sys.argv
 if USE_GUI:
     from gooey import Gooey, GooeyParser
+
+
+def open_native_file_manager(path: str) -> None:
+    """Open a folder in the native file manager (Finder, Explorer, Nautilus)."""
+    path = os.path.normpath(path)
+    try:
+        if sys.platform == "win32":
+            subprocess.Popen(["explorer", path])
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", path])
+        else:
+            subprocess.Popen(["xdg-open", path])
+    except Exception:
+        pass
 
 
 def print_version_info() -> None:
@@ -145,6 +160,14 @@ def parse_args() -> argparse.Namespace:
     )
 
     advanced = parser.add_argument_group("Advanced")
+    advanced.add_argument(
+        "--no-reveal",
+        dest="no_reveal",
+        action="store_true",
+        default=cfg.get("no_reveal", False),
+        **gui(widget="CheckBox"),
+        help="Do not open the output folder in the file manager when done",
+    )
     advanced.add_argument(
         "--version", action="store_true", help="Show version information and exit"
     )
@@ -323,6 +346,8 @@ def main() -> None:
     print(f"Groups processed : {len(groups)}")
     print(f"Snippets written : {total_snippets}")
     print(f"Output directory : {output_dir.resolve()}")
+    if not args.no_reveal:
+        open_native_file_manager(str(output_dir.resolve()))
 
 
 if USE_GUI:
