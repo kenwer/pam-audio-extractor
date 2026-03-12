@@ -137,7 +137,7 @@ Ardea cinerea_Grey Heron
 The output is written to the specified output directory, for example
 ```
 birdnet-detections_conf_0_25_2026_02_26/
-  All-BirdNET-detections.csv   # one row per detection, all ARUs combined
+  all-birdnet-detections.csv   # one row per detection, all ARUs combined
   summary-per-aru.csv          # one row per (ARU × species)
   summary-all-arus.csv         # one row per species across all ARUs
   species-list.txt             # geographic species list (only when --lat/--lon are set)
@@ -146,7 +146,7 @@ birdnet-detections_conf_0_25_2026_02_26/
     ...
 ```
 
-**All-BirdNET-detections.csv** contains one row per detection above `--min-conf`:
+**all-birdnet-detections.csv** contains one row per detection above `--min-conf`:
 | Column | Description |
 |---|---|
 | `file` | Absolute path to the source WAV file |
@@ -198,7 +198,7 @@ birdnet-detections_conf_0_25_2026_02_26/
   ```
 * CLI:
   ```shell
-  ./3-extract-top-detections.py birdnet-detections_conf_0_25_2026_02_26/All-BirdNET-detections.csv
+  ./3-extract-top-detections.py birdnet-detections_conf_0_25_2026_02_26/all-birdnet-detections.csv
   ```
 
 Snippets are written to `top-detection-snippets/` next to the source audio recordings. Each filename encodes ARU, species, segment rank (rank of this species within its 3-second window - 1 = highest-confidence detection in that window), confidence, timestamp, and detection window:
@@ -208,7 +208,7 @@ MSD-109_-_Turdus iliacus_Redwing_-_segrank2_-_conf0.4691_-_20260225_064500_-_36.
 
 | Option | Default | Description |
 |---|---|---|
-| `detections_csv` | - | Path to `All-BirdNET-detections.csv` |
+| `detections_csv` | - | Path to `all-birdnet-detections.csv` |
 | `--top-n` | `10` | Max snippets per (ARU, species) pair, ranked by confidence |
 | `--padding` | `1.5` | Seconds of audio before/after each detection window |
 | `--output` | `<audio_dir>/top-detection-snippets` | Override output directory |
@@ -218,11 +218,11 @@ MSD-109_-_Turdus iliacus_Redwing_-_segrank2_-_conf0.4691_-_20260225_064500_-_36.
 
 ```bash
 # One ARU, filtered to species list, from a specific date
-./3-extract-top-detections.py All-BirdNET-detections.csv \
+./3-extract-top-detections.py all-birdnet-detections.csv \
   --aru MSD-109 --species-filter-file ./custom_species_list.txt --date-from 2026-02-25
 
 # Top 5 snippets with tighter padding
-./3-extract-top-detections.py All-BirdNET-detections.csv --top-n 5 --padding 1.5
+./3-extract-top-detections.py all-birdnet-detections.csv --top-n 5 --padding 1.5
 ```
 
 ---

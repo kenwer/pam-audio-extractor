@@ -452,7 +452,7 @@ def main() -> None:
     validate_audio_dir(args.audio_dir)
 
     output_dir = args.output or default_output_dir(args.min_conf)
-    csv_output_path = str(Path(output_dir) / "All-BirdNET-detections.csv")
+    csv_output_path = str(Path(output_dir) / "all-birdnet-detections.csv")
 
     species_set: set[str] | None = None
     if args.species_filter_file:
