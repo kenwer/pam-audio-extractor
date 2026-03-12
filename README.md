@@ -84,6 +84,7 @@ birdnet-detections_conf_0_25_2026_02_26/
   All-BirdNET-detections.csv          # enriched detections for all ARUs, incl. segment_rank
   summary-per-aru.csv                 # detection count, max confidence, and best segment rank per (ARU × species)
   summary-all-arus.csv                # detection count, max confidence, and best segment rank per species across all ARUs
+  species-list.txt                    # geographic species list used by BirdNET (only when --lat/--lon are set)
   MSD-109/
     20260225_064500.BirdNET.results.csv
     ...

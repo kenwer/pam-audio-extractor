@@ -593,6 +593,19 @@ def main() -> None:
     print(f"  Output dir    : {output_dir}/", file=sys.stderr)
     print(f"  Detections CSV: {csv_output_path}", file=sys.stderr)
     write_summary_tables(detections, output_dir)
+
+    if args.lat != -1 and args.lon != -1:
+        # Export the geographic species list used by BirdNET for this run.
+        # BirdNET's location model (BirdNET_GLOBAL_6K_V2.4_MData_Model_V2_FP16.tflite)
+        # scores each of ~6,000 species for the given lat/lon/week and retains those
+        # above sf_thresh=0.03. Writing it out makes the analysis reproducible and lets
+        # users inspect or reuse the list.
+        from birdnet_analyzer.species.utils import get_species_list
+        species_list_path = str(Path(output_dir) / "species-list.txt")
+        geo_species = get_species_list(args.lat, args.lon, week if week is not None else -1, threshold=0.03)
+        with open(species_list_path, "w", encoding="utf-8") as f:
+            f.writelines(s + "\n" for s in geo_species)
+        print(f"  Species list  : {species_list_path} ({len(geo_species)} species)", file=sys.stderr)
     if not args.no_reveal:
         open_native_file_manager(output_dir)
 
