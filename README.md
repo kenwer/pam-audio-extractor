@@ -81,7 +81,7 @@ Once running, it waits for SD cards to be inserted into the reader. The script d
 Output is written to the specified output directory:
 ```
 birdnet-detections_conf_0_25_2026_02_26/
-  All-BirdNET-detections.csv          # enriched detections for all ARUs
+  All-BirdNET-detections.csv          # enriched detections for all ARUs, incl. segment_rank
   summary-per-aru.csv                 # detection count, max confidence, and best segment rank per (ARU × species)
   summary-all-arus.csv                # detection count, max confidence, and best segment rank per species across all ARUs
   MSD-109/
@@ -140,9 +140,9 @@ Ardea cinerea_Grey Heron
   ./3-extract-top-detections.py birdnet-detections_conf_0_25_2026_02_26/All-BirdNET-detections.csv
   ```
 
-Snippets are written to `top-detection-snippets/` next to the source audio recordings. Each filename encodes ARU, species, rank, confidence, timestamp, and detection window:
+Snippets are written to `top-detection-snippets/` next to the source audio recordings. Each filename encodes ARU, species, segment rank (rank of this species within its 3-second window — 1 = highest-confidence detection in that window), confidence, timestamp, and detection window:
 ```
-MSD-109_-_Turdus merula_Eurasian Blackbird_-top1-_-_01_conf0.8014_20260225_064500_6.0-9.0.wav
+MSD-109_-_Turdus iliacus_Redwing_-_segrank2_-_conf0.4691_-_20260225_064500_-_36.0_-_39.0.wav
 ```
 
 | Option | Default | Description |

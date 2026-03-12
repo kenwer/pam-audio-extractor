@@ -365,28 +365,18 @@ def write_summary_tables(rows: list[dict], output_dir: str) -> None:
 
     Both tables include a ``max_position`` / ``best_position_any_aru`` column (e.g.
     ``top-1``, ``top-2``) indicating the best rank this species achieved within any
-    single 3-second segment. Rank is determined by sorting all detections in a segment
-    by confidence descending; rank 1 = highest confidence in that segment.
-
-    Note: position is computed from the already-filtered ``rows`` (min_conf and
-    species-list filters applied). Detections removed by filtering are not counted when
-    ranking, so reported positions may be optimistic relative to the raw BirdNET output.
+    single 3-second segment. Rank 1 = highest-confidence species in that segment,
+    rank 2 = second-highest, etc. The rank is stored per detection in ``segment_rank``.
     """
-    # Compute per-segment ranks
-    # Group detections by (file, start_time, end_time) — one entry per 3-sec window.
-    # Sort each segment by confidence descending and assign a 1-based rank.
-    # For each (aru, species) pair track the best (lowest) rank seen across all segments.
-    seg_groups: dict[tuple, list] = defaultdict(list)
-    for row in rows:
-        seg_key = (row["file"], row["start_time"], row["end_time"])
-        seg_groups[seg_key].append(row)
-
+    # Each detection carries a ``segment_rank``: within its 3-second BirdNET analysis
+    # window, all detected species are sorted by confidence descending and assigned a
+    # 1-based rank (1 = highest-confidence in that window, 2 = second-highest, etc.).
+    # Here we reduce to the single best (lowest) rank each (aru, species) pair ever achieved.
     best_rank: dict[tuple, int] = {}  # (aru_number, species) -> best segment rank
-    for seg_rows in seg_groups.values():
-        seg_rows_sorted = sorted(seg_rows, key=lambda r: float(r["confidence"]), reverse=True)
-        for rank, seg_row in enumerate(seg_rows_sorted, start=1):
-            key = (seg_row["aru_number"], seg_row["species"])
-            best_rank[key] = min(best_rank.get(key, rank), rank)
+    for row in rows:
+        key = (row["aru_number"], row["species"])
+        rank = int(row["segment_rank"])
+        best_rank[key] = min(best_rank.get(key, rank), rank)
 
     def fmt_position(rank: int) -> str:
         return f"top-{rank}"
@@ -541,6 +531,7 @@ def main() -> None:
         "species",
         "scientific_name",
         "confidence",
+        "segment_rank",
         "start_time",
         "end_time",
         "recording_time",
@@ -554,33 +545,48 @@ def main() -> None:
         writer.writeheader()
 
         for result_csv in result_csvs:
+            # Load all rows for this file so we can compute per-segment ranks before
+            # filtering. Within each 3-second window, species are ranked by confidence
+            # descending (rank 1 = highest-confidence detection in that window).
             with open(result_csv, newline="", encoding="utf-8") as infile:
-                for row in csv.DictReader(infile):
-                    scientific_name: str = row["Scientific name"]
-                    label: str = f"{scientific_name}_{row['Common name']}"
+                file_rows = list(csv.DictReader(infile))
+            seg_groups: dict[tuple, list] = defaultdict(list)
+            for row in file_rows:
+                seg_groups[(row["Start (s)"], row["End (s)"])].append(row)
+            seg_rank: dict[tuple, int] = {}  # (start_s, end_s, common_name) -> 1-based rank
+            for seg_rows in seg_groups.values():
+                for rank, seg_row in enumerate(
+                    sorted(seg_rows, key=lambda r: float(r["Confidence"]), reverse=True), start=1
+                ):
+                    seg_rank[(seg_row["Start (s)"], seg_row["End (s)"], seg_row["Common name"])] = rank
 
-                    if species_set is not None and label not in species_set:
-                        continue
-                    if float(row["Confidence"]) < args.min_conf:
-                        continue
+            for row in file_rows:
+                scientific_name: str = row["Scientific name"]
+                label: str = f"{scientific_name}_{row['Common name']}"
 
-                    file_path = Path(row["File"])
-                    aru_number: str = file_path.parent.name
-                    recording_time: datetime | None = parse_recording_time(file_path.stem)
+                if species_set is not None and label not in species_set:
+                    continue
+                if float(row["Confidence"]) < args.min_conf:
+                    continue
 
-                    detection = {
-                        "file": row["File"],
-                        "aru_number": aru_number,
-                        "species": row["Common name"],
-                        "scientific_name": scientific_name,
-                        "confidence": row["Confidence"],
-                        "start_time": row["Start (s)"],
-                        "end_time": row["End (s)"],
-                        "recording_time": str(recording_time) if recording_time else "",
-                        **run_context,
-                    }
-                    writer.writerow(detection)
-                    detections.append(detection)
+                file_path = Path(row["File"])
+                aru_number: str = file_path.parent.name
+                recording_time: datetime | None = parse_recording_time(file_path.stem)
+
+                detection = {
+                    "file": row["File"],
+                    "aru_number": aru_number,
+                    "species": row["Common name"],
+                    "scientific_name": scientific_name,
+                    "confidence": row["Confidence"],
+                    "segment_rank": seg_rank[(row["Start (s)"], row["End (s)"], row["Common name"])],
+                    "start_time": row["Start (s)"],
+                    "end_time": row["End (s)"],
+                    "recording_time": str(recording_time) if recording_time else "",
+                    **run_context,
+                }
+                writer.writerow(detection)
+                detections.append(detection)
 
     print(file=sys.stderr)
     print(f"Total detections: {len(detections)}", file=sys.stderr)

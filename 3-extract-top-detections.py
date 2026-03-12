@@ -120,7 +120,7 @@ def parse_args() -> argparse.Namespace:
         choices=["No limit"] + [str(i) for i in range(1, 21)],
         default=str(cfg.get("top_n", 10)),
         **gui(widget="Dropdown"),
-        help="Max snippets per (ARU, species) pair (default: No limit)",
+        help="Max snippets per (ARU, species) pair (default: 10)",
     )
     optional.add_argument(
         "--padding",
@@ -280,7 +280,7 @@ def extract_snippet(row: dict, padding: float, out_path: Path) -> None:
     end = min(len(audio) / sr, float(row["end_time"]) + padding)
     snippet = audio[int(start * sr) : int(end * sr)]
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    sf.write(str(out_path), snippet, sr)
+    sf.write(out_path, snippet, sr)
 
 
 def main() -> None:
@@ -322,19 +322,20 @@ def main() -> None:
             continue
         top_rows = group_rows[:top_n]
 
-        for rank, row in enumerate(top_rows, start=1):
+        for row in top_rows:
             try:
                 confidence = float(row["confidence"])
                 start_t = float(row["start_time"])
                 end_t = float(row["end_time"])
             except (ValueError, KeyError) as e:
-                print(f"Warning: Skipping row (aru={aru}, rank={rank}): bad numeric value: {e}", file=sys.stderr)
+                print(f"Warning: Skipping row (aru={aru}, species={species_key}): bad numeric value: {e}", file=sys.stderr)
                 continue
 
             rec_dt = _recording_datetime(row)
             ts_str = rec_dt.strftime("%Y%m%d_%H%M%S") if rec_dt else "unknown"
 
-            filename = f"{aru}_-_{species_key}_-_top{rank}_-_{rank:02d}_conf{confidence:.4f}_-_{ts_str}_-_{start_t}_-_{end_t}.wav"
+            seg_rank = row.get("segment_rank", "")
+            filename = f"{aru}_-_{species_key}_-_segrank{seg_rank}_-_conf{confidence:.4f}_-_{ts_str}_-_{start_t}_-_{end_t}.wav"
             out_path = output_dir / filename
 
             try:
