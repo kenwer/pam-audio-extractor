@@ -150,13 +150,13 @@ def parse_args() -> argparse.Namespace:
         **gui(widget="FileChooser", gooey_options={"full_width": True}),
         help="Path to species filter file (Scientific name_Common name, one per line)",
     )
+    _aru_cfg = cfg.get("aru") or []
     optional.add_argument(
         "--aru",
-        action="append",
         dest="aru",
-        metavar="ARU",
+        default="\n".join(_aru_cfg) if _aru_cfg else None,
         **gui(widget="Textarea"),
-        help="Include only these ARU numbers (repeatable; one per line in GUI)",
+        help="Include only these ARU numbers (one per line in GUI)",
     )
 
     advanced = parser.add_argument_group("Advanced")
@@ -190,15 +190,17 @@ def load_detections(csv_path: str) -> list[dict]:
         sys.exit(1)
 
 
-def _flatten(values: list[str] | None) -> list[str] | None:
-    """Normalise a list that may contain newline-joined values from a Gooey Textarea.
+def _flatten(values: list[str] | str | None) -> list[str] | None:
+    """Normalise a Gooey Textarea value (or list thereof) into a flat list of strings.
 
-    CLI:  args.aru = ["109", "110"]   (two --aru flags, already flat)
-    GUI:  args.aru = ["109\\n110"]    (one Textarea value with newlines)
-    Both become ["109", "110"].
+    A Textarea arg without ``action="append"`` produces a plain string:
+      CLI:  args.aru = "MSD-109"              -> ["MSD-109"]
+      GUI:  args.aru = "MSD-109\\nMSD-110"   -> ["MSD-109", "MSD-110"]
     """
     if not values:
         return None
+    if isinstance(values, str):
+        values = [values]
     flat = [item.strip() for v in values for item in v.splitlines() if item.strip()]
     return flat or None
 
@@ -314,6 +316,8 @@ def main() -> None:
 
     rows = load_detections(args.detections_csv)
     output_dir = Path(args.output) if args.output else default_output_dir(args.detections_csv, rows)
+    # Detect locale columns present in the CSV (e.g. species_de, species_fr).
+    locale_cols = [k for k in (rows[0].keys() if rows else []) if k.startswith("species_")]
     rows = apply_filters(rows, args)
 
     # Group by (aru_number, species_key)
@@ -345,7 +349,9 @@ def main() -> None:
             ts_str = rec_dt.strftime("%Y%m%d_%H%M%S") if rec_dt else "unknown"
 
             seg_rank = row.get("segment_rank", "")
-            filename = f"{aru}_-_{species_key}_-_segrank{seg_rank}_-_conf{confidence:.4f}_-_{ts_str}_-_{start_t}_-_{end_t}.wav"
+            locale_names = "_".join(row[col] for col in locale_cols if row.get(col))
+            species_part = f"{species_key}_{locale_names}" if locale_names else species_key
+            filename = f"{aru}_-_{species_part}_-_segrank{seg_rank}_-_conf{confidence:.4f}_-_{ts_str}_-_{start_t}_-_{end_t}.wav"
             out_path = output_dir / filename
 
             try:

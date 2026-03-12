@@ -78,6 +78,57 @@ def _config_defaults(script_path: Path) -> dict:
         return tomllib.load(f).get(script_path.stem, {})
 
 
+def _flatten(values: list[str] | str | None) -> list[str] | None:
+    """Normalise a Gooey Textarea value (or list thereof) into a flat list of strings.
+
+    A Textarea arg without ``action="append"`` produces a plain string:
+      CLI:  args.locale = "de"          -> ["de"]
+      GUI:  args.locale = "de\\nfr"    -> ["de", "fr"]
+    """
+    if not values:
+        return None
+    if isinstance(values, str):
+        values = [values]
+    flat = [item.strip() for v in values for item in v.splitlines() if item.strip()]
+    return flat or None
+
+
+def load_locale_labels(locale: str) -> dict[str, str]:
+    """Return a mapping from scientific name to localized common name.
+
+    BirdNET bundles one label file per language under
+    ``birdnet_analyzer/labels/V2.4/BirdNET_GLOBAL_6K_V2.4_Labels_{locale}.txt``.
+    Each line has the format ``Scientific name_Localized common name``.
+    The mapping key is the scientific name (e.g. ``Turdus merula``); the value
+    is the localized common name (e.g. ``Amsel``).
+
+    Returns an empty dict and prints a warning if the locale is not found.
+    """
+    labels_dir = Path(birdnet_analyzer.__file__).parent / "labels" / "V2.4"
+    loc_path = labels_dir / f"BirdNET_GLOBAL_6K_V2.4_Labels_{locale}.txt"
+
+    if not loc_path.exists():
+        available = sorted(
+            p.stem.rsplit("_", 1)[-1]
+            for p in labels_dir.glob("BirdNET_GLOBAL_6K_V2.4_Labels_*.txt")
+        )
+        print(
+            f"Warning: locale '{locale}' not found. "
+            f"Available locales: {', '.join(available)}",
+            file=sys.stderr,
+        )
+        return {}
+
+    mapping: dict[str, str] = {}
+    with open(loc_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if "_" in line:
+                scientific, localized = line.split("_", 1)
+                mapping[scientific] = localized
+    return mapping
+
+
 def parse_args() -> argparse.Namespace:
     """Parse and return command-line arguments."""
     if USE_GUI:
@@ -189,6 +240,20 @@ def parse_args() -> argparse.Namespace:
         choices=["Auto"] + [str(i) for i in [1, 2, 4, 8, 16, 32, 64, 128, 256]],
         default="Auto" if not cfg.get("num_threads") else str(cfg.get("num_threads")),
         help="Number of CPU threads for parallel file analysis (default: auto-detect via os.cpu_count())",
+    )
+    _locale_cfg = cfg.get("locale") or []
+    advanced.add_argument(
+        "--locale",
+        dest="locale",
+        default="\n".join(_locale_cfg) if _locale_cfg else None,
+        **gui(widget="Textarea"),
+        help=(
+            "Add a localized species name column to the output CSVs "
+            "(e.g. de, fr, ja). One per line in GUI. "
+            "Available: af, ar, bg, ca, cs, da, de, el, en_uk, es, fi, fr, he, "
+            "hr, hu, in, is, it, ja, ko, lt, ml, nl, no, pl, pt_BR, pt_PT, ro, "
+            "ru, sk, sl, sr, sv, th, tr, uk, zh."
+        ),
     )
     advanced.add_argument(
         "--no-reveal",
@@ -356,7 +421,7 @@ def validate_audio_dir(audio_dir: str) -> None:
         print(f"  {aru}: {count} file(s)", file=sys.stderr)
 
 
-def write_summary_tables(rows: list[dict], output_dir: str) -> None:
+def write_summary_tables(rows: list[dict], output_dir: str, locale_cols: list[str]) -> None:
     """Write per-ARU and global detection summary CSVs from the filtered detections.
 
     Produces:
@@ -370,6 +435,9 @@ def write_summary_tables(rows: list[dict], output_dir: str) -> None:
     was consistently outcompeted in confidence by another species in the same window —
     a useful signal for spotting likely false positives. The rank is stored per
     detection in ``segment_rank``.
+
+    When ``locale_cols`` is non-empty, each column is appended after ``species``,
+    using values already embedded in the detection rows.
     """
     # Each detection carries a ``segment_rank``: within its 3-second BirdNET analysis
     # window, all detected species are sorted by confidence descending and assigned a
@@ -381,21 +449,20 @@ def write_summary_tables(rows: list[dict], output_dir: str) -> None:
         rank = int(row["segment_rank"])
         best_rank[key] = min(best_rank.get(key, rank), rank)
 
-    def fmt_position(rank: int) -> str:
-        return f"top-{rank}"
-
     # Per-ARU aggregation
-    per_aru: dict[tuple, dict] = defaultdict(lambda: {"count": 0, "max_conf": 0.0, "scientific_name": ""})
+    per_aru: dict[tuple, dict] = defaultdict(lambda: {"count": 0, "max_conf": 0.0, "scientific_name": "", "locale_names": {}})
     for row in rows:
         key = (row["aru_number"], row["species"])
         per_aru[key]["count"] += 1
         per_aru[key]["max_conf"] = max(per_aru[key]["max_conf"], float(row["confidence"]))
         per_aru[key]["scientific_name"] = row["scientific_name"]
+        for col in locale_cols:
+            per_aru[key]["locale_names"][col] = row.get(col, "")
 
     per_aru_path = str(Path(output_dir) / "summary-per-aru.csv")
     with open(per_aru_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
-            f, fieldnames=["aru_number", "scientific_name", "species", "detection_count", "max_confidence", "best_segment_rank"]
+            f, fieldnames=["aru_number", "scientific_name", "species", *locale_cols, "detection_count", "max_confidence", "best_segment_rank"]
         )
         writer.writeheader()
         for (aru, species), data in sorted(per_aru.items(), key=lambda x: (x[0][0], -x[1]["count"])):
@@ -403,34 +470,37 @@ def write_summary_tables(rows: list[dict], output_dir: str) -> None:
                 "aru_number": aru,
                 "species": species,
                 "scientific_name": data["scientific_name"],
+                **data["locale_names"],
                 "detection_count": data["count"],
                 "max_confidence": f"{data['max_conf']:.4f}",
-                "best_segment_rank": fmt_position(best_rank[(aru, species)]),
+                "best_segment_rank": f"top-{best_rank[(aru, species)]}",
             })
 
     # Global aggregation
-    global_agg: dict[str, dict] = defaultdict(lambda: {"count": 0, "max_conf": 0.0, "arus": set(), "scientific_name": "", "best_rank": float("inf")})
+    global_agg: dict[str, dict] = defaultdict(lambda: {"count": 0, "max_conf": 0.0, "arus": set(), "scientific_name": "", "best_rank": float("inf"), "locale_names": {}})
     for (aru, species), data in per_aru.items():
         global_agg[species]["count"] += data["count"]
         global_agg[species]["max_conf"] = max(global_agg[species]["max_conf"], data["max_conf"])
         global_agg[species]["arus"].add(aru)
         global_agg[species]["scientific_name"] = data["scientific_name"]
         global_agg[species]["best_rank"] = min(global_agg[species]["best_rank"], best_rank[(aru, species)])
+        global_agg[species]["locale_names"].update(data["locale_names"])
 
     global_path = str(Path(output_dir) / "summary-all-arus.csv")
     with open(global_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
-            f, fieldnames=["scientific_name", "species", "total_detections", "max_confidence", "aru_count", "best_segment_rank_any_aru"]
+            f, fieldnames=["scientific_name", "species", *locale_cols, "total_detections", "max_confidence", "aru_count", "best_segment_rank_any_aru"]
         )
         writer.writeheader()
         for species, data in sorted(global_agg.items(), key=lambda x: -x[1]["count"]):
             writer.writerow({
                 "species": species,
                 "scientific_name": data["scientific_name"],
+                **data["locale_names"],
                 "total_detections": data["count"],
                 "max_confidence": f"{data['max_conf']:.4f}",
                 "aru_count": len(data["arus"]),
-                "best_segment_rank_any_aru": fmt_position(int(data["best_rank"])),
+                "best_segment_rank_any_aru": f"top-{int(data['best_rank'])}",
             })
 
     print(f"  Per-ARU summary : {per_aru_path}", file=sys.stderr)
@@ -444,6 +514,8 @@ def main() -> None:
     if args.version:
         print_version_info()
         return
+
+    args.locale = _flatten(args.locale) or []
 
     if not args.audio_dir:
         print("error: audio_dir is required", file=sys.stderr)
@@ -528,11 +600,17 @@ def main() -> None:
         "model": os.path.basename(birdnet_cfg.MODEL_PATH),
     }
 
+    # Load localized name mappings for each requested locale.
+    # Each map: scientific name -> localized common name.
+    locale_maps: dict[str, dict[str, str]] = {loc: load_locale_labels(loc) for loc in args.locale}
+    locale_cols = [f"species_{loc}" for loc in args.locale]
+
     fieldnames = [
         "file",
         "aru_number",
         "scientific_name",
         "species",
+        *locale_cols,
         "confidence",
         "segment_rank",
         "start_time",
@@ -576,11 +654,16 @@ def main() -> None:
                 aru_number: str = file_path.parent.name
                 recording_time: datetime | None = parse_recording_time(file_path.stem)
 
+                locale_names = {
+                    f"species_{loc}": locale_maps[loc].get(scientific_name, "")
+                    for loc in args.locale
+                }
                 detection = {
                     "file": row["File"],
                     "aru_number": aru_number,
                     "species": row["Common name"],
                     "scientific_name": scientific_name,
+                    **locale_names,
                     "confidence": row["Confidence"],
                     "segment_rank": seg_rank[(row["Start (s)"], row["End (s)"], row["Common name"])],
                     "start_time": row["Start (s)"],
@@ -595,7 +678,7 @@ def main() -> None:
     print(f"Total detections: {len(detections)}", file=sys.stderr)
     print(f"  Output dir    : {output_dir}/", file=sys.stderr)
     print(f"  Detections CSV: {csv_output_path}", file=sys.stderr)
-    write_summary_tables(detections, output_dir)
+    write_summary_tables(detections, output_dir, locale_cols)
 
     if args.lat != -1 and args.lon != -1:
         # Export the geographic species list used by BirdNET for this run.

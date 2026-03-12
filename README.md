@@ -105,6 +105,7 @@ audio-recordings/
 | `--lat` | `-1` (off) | Recording location latitude. Enables geographic (eBird-like) species filtering; requires `--lon`. |
 | `--lon` | `-1` (off) | Recording location longitude. See `--lat`. |
 | `--week` | `Auto` | Week of year [1–48] for seasonal filtering. Only used with `--lat`/`--lon`. `Auto`: detect from WAV GUANO metadata. `Year-round`: disable seasonal filtering. |
+| `--locale` | none | Add localized species name columns to the output CSVs (e.g. `de`, `fr`). One per line in GUI. Available codes: `af`, `ar`, `bg`, `ca`, `cs`, `da`, `de`, `el`, `en_uk`, `es`, `fi`, `fr`, `he`, `hr`, `hu`, `in`, `is`, `it`, `ja`, `ko`, `lt`, `ml`, `nl`, `no`, `pl`, `pt_BR`, `pt_PT`, `ro`, `ru`, `sk`, `sl`, `sr`, `sv`, `th`, `tr`, `uk`, `zh`. |
 | `--overlap` | `0.0` | Overlap of prediction segments in seconds [0.0–2.9]. Higher values produce more detections at the cost of longer runtime. |
 | `--num-threads` | auto | Number of CPU threads for parallel file analysis. Auto-detected via `os.cpu_count()`. |
 
@@ -152,7 +153,8 @@ birdnet-detections_conf25_2026-02-26/
 | `file` | Absolute path to the source WAV file |
 | `aru_number` | ARU identifier (name of the subdirectory containing the file) |
 | `scientific_name` | Scientific name as reported by BirdNET |
-| `species` | Common name as reported by BirdNET |
+| `species` | Common name as reported by BirdNET (English) |
+| `species_{locale}` | Localized common name for each `--locale` requested (e.g. `species_de`). Column only present when the corresponding locale was specified. |
 | `confidence` | BirdNET confidence score (0–1) |
 | `segment_rank` | Rank of this species within its 3-second window, sorted by confidence descending (1 = highest-confidence detection in that window, 2 = second-highest, etc.). Useful for spotting likely false positives: a species consistently ranked 2 or lower was always outcompeted by another species in the same window. |
 | `start_time` | Start of the 3-second detection window in seconds |
@@ -169,7 +171,8 @@ birdnet-detections_conf25_2026-02-26/
 | Column | Description |
 |---|---|
 | `scientific_name` | Scientific name |
-| `species` | Common name |
+| `species` | Common name (English) |
+| `species_{locale}` | Localized common name for each `--locale` requested. Column only present when the corresponding locale was specified. |
 | `total_detections` | Total detection count across all ARUs |
 | `max_confidence` | Highest confidence score seen across all ARUs |
 | `aru_count` | Number of distinct ARUs where this species was detected |
@@ -180,7 +183,8 @@ birdnet-detections_conf25_2026-02-26/
 |---|---|
 | `aru_number` | ARU identifier |
 | `scientific_name` | Scientific name |
-| `species` | Common name |
+| `species` | Common name (English) |
+| `species_{locale}` | Localized common name for each `--locale` requested. Column only present when the corresponding locale was specified. |
 | `detection_count` | Number of detections above `--min-conf` |
 | `max_confidence` | Highest confidence score seen across all detections |
 | `best_segment_rank` | Best (lowest) `segment_rank` this species achieved in any single 3-second window at this ARU (e.g. `top-1` means it was the dominant detection in at least one window) |
@@ -213,7 +217,7 @@ MSD-109_-_Turdus iliacus_Redwing_-_segrank2_-_conf0.4691_-_20260225_064500_-_36.
 | `--padding` | `1.5` | Seconds of audio before/after each detection window |
 | `--output` | `<audio_dir>/top-detection-snippets` | Override output directory |
 | `--species-filter-file` | none | Species filter file |
-| `--aru` | all | Restrict to specific ARUs (repeatable) |
+| `--aru` | all | Restrict to specific ARUs (one per line in GUI) |
 | `--date-from` / `--date-to` | none | Date range filter (`YYYY-MM-DD`) |
 
 ```bash

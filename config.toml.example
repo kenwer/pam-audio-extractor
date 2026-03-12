@@ -40,6 +40,13 @@ species_filter_file = ""
 # Minimum BirdNET confidence threshold (0–1)
 min_conf = 0.25
 
+# Add localized species name columns to the output CSVs (leave empty for English only).
+# Each entry is a BirdNET locale code. Available: af, ar, bg, ca, cs, da, de, el,
+# en_uk, es, fi, fr, he, hr, hu, in, is, it, ja, ko, lt, ml, nl, no, pl, pt_BR,
+# pt_PT, ro, ru, sk, sl, sr, sv, th, tr, uk, zh.
+# locale = ["de", "fr"]
+locale = []
+
 # Output directory (leave empty to auto-generate based on confidence and today's date)
 output = ""
 
