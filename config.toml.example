@@ -48,15 +48,15 @@ output = ""
 [3-extract-top-detections]
 
 # Path to the detections CSV produced by 2-analyze-pam-recordings.py (required)
-detections_csv = "C:/Data/birdnet-detections/All-BirdNET-detections.csv"
+detections_csv = "C:/Data/birdnet-detections_conf25_2026-02-26/all-birdnet-detections.csv"
 
 # Maximum snippets per (ARU, species) pair, ranked by confidence
 top_n = 10
 
 # Seconds of audio to include before and after each detection window
-padding = 3.0
+padding = 1.5
 
-# Output root directory (leave empty to use <csv_dir>/top-detections)
+# Output root directory (leave empty to place top-detection-snippets/ next to the source audio recordings)
 output = ""
 
 # Path to species filter file — one "Scientific name_Common name" label per line

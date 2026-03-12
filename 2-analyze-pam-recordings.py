@@ -282,18 +282,18 @@ def detect_predominant_week(audio_dir: str) -> int | None:
 def default_output_dir(min_conf: float) -> str:
     """Generate a default output directory name based on confidence and today's date.
 
-    The format is ``birdnet_detections_all_conf_{conf}_{YYYY_MM_DD}``, where
-    the decimal point in *min_conf* is replaced with an underscore.
+    The format is ``birdnet-detections_conf{conf}_{YYYY-MM-DD}``, where
+    *conf* is *min_conf* expressed as an integer percentage (e.g. 0.25 becomes 25).
 
     Args:
         min_conf: The minimum confidence threshold used for the run.
 
     Returns:
-        A directory name such as ``birdnet-detections_conf_0_1_2026_02_26``.
+        A directory name such as ``birdnet-detections_conf25_2026-02-26``.
     """
-    date_str = datetime.now().strftime("%Y_%m_%d")
-    conf_str = str(min_conf).replace(".", "_")
-    return f"birdnet-detections_conf_{conf_str}_{date_str}"
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    conf_pct = round(min_conf * 100)
+    return f"birdnet-detections_conf{conf_pct}_{date_str}"
 
 
 def validate_audio_dir(audio_dir: str) -> None:

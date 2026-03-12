@@ -134,9 +134,9 @@ Ardea cinerea_Grey Heron
 ```
 
 #### Output structure
-The output is written to the specified output directory, for example
+The output is written to the specified output directory, for example:
 ```
-birdnet-detections_conf_0_25_2026_02_26/
+birdnet-detections_conf25_2026-02-26/
   all-birdnet-detections.csv   # one row per detection, all ARUs combined
   summary-per-aru.csv          # one row per (ARU × species)
   summary-all-arus.csv         # one row per species across all ARUs
@@ -198,7 +198,7 @@ birdnet-detections_conf_0_25_2026_02_26/
   ```
 * CLI:
   ```shell
-  ./3-extract-top-detections.py birdnet-detections_conf_0_25_2026_02_26/all-birdnet-detections.csv
+  ./3-extract-top-detections.py birdnet-detections_conf25_2026-02-26/all-birdnet-detections.csv
   ```
 
 Snippets are written to `top-detection-snippets/` next to the source audio recordings. Each filename encodes ARU, species, segment rank (rank of this species within its 3-second window - 1 = highest-confidence detection in that window), confidence, timestamp, and detection window:
