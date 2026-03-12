@@ -392,7 +392,7 @@ def write_summary_tables(rows: list[dict], output_dir: str) -> None:
     per_aru_path = str(Path(output_dir) / "summary-per-aru.csv")
     with open(per_aru_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
-            f, fieldnames=["aru_number", "species", "scientific_name", "detection_count", "max_confidence", "max_position"]
+            f, fieldnames=["aru_number", "scientific_name", "species", "detection_count", "max_confidence", "max_position"]
         )
         writer.writeheader()
         for (aru, species), data in sorted(per_aru.items(), key=lambda x: (x[0][0], -x[1]["count"])):
@@ -417,7 +417,7 @@ def write_summary_tables(rows: list[dict], output_dir: str) -> None:
     global_path = str(Path(output_dir) / "summary-all-arus.csv")
     with open(global_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
-            f, fieldnames=["species", "scientific_name", "total_detections", "max_confidence", "aru_count", "best_position_any_aru"]
+            f, fieldnames=["scientific_name", "species", "total_detections", "max_confidence", "aru_count", "best_position_any_aru"]
         )
         writer.writeheader()
         for species, data in sorted(global_agg.items(), key=lambda x: -x[1]["count"]):
@@ -528,8 +528,8 @@ def main() -> None:
     fieldnames = [
         "file",
         "aru_number",
-        "species",
         "scientific_name",
+        "species",
         "confidence",
         "segment_rank",
         "start_time",
