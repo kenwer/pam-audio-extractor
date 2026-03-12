@@ -220,6 +220,16 @@ def load_species_filter(filter_path: str | Path) -> set[str]:
 
 
 def apply_filters(rows: list[dict], args: argparse.Namespace) -> list[dict]:
+    """Filter detection rows according to the CLI arguments.
+
+    Applies up to three independent filters in order:
+    - ARU: keep only rows whose ``aru_number`` is in ``--aru`` (if set)
+    - Date range: keep only rows whose recording date falls within
+      ``--date-from`` / ``--date-to`` (if set); rows with an unparseable
+      recording date are included with a warning
+    - Species: keep only rows whose ``Scientific name_Common name`` label is
+      in the ``--species-filter-file`` (if set)
+    """
     allowed_arus = set(args.aru) if args.aru else None
     allowed_species = load_species_filter(args.species_filter_file) if args.species_filter_file else None
 

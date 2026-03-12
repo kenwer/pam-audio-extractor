@@ -363,10 +363,13 @@ def write_summary_tables(rows: list[dict], output_dir: str) -> None:
       summary-per-aru.csv  — one row per (ARU x species), sorted by ARU then count desc
       summary-all-arus.csv — one row per species across all ARUs, sorted by count desc
 
-    Both tables include a ``max_position`` / ``best_position_any_aru`` column (e.g.
-    ``top-1``, ``top-2``) indicating the best rank this species achieved within any
-    single 3-second segment. Rank 1 = highest-confidence species in that segment,
-    rank 2 = second-highest, etc. The rank is stored per detection in ``segment_rank``.
+    Both tables include a ``best_segment_rank`` / ``best_segment_rank_any_aru`` column
+    (e.g. ``top-1``, ``top-2``) indicating the best rank this species ever achieved
+    within a single 3-second segment. Rank 1 = highest-confidence species in that
+    segment, rank 2 = second-highest, etc. A species that is always ``top-2`` or lower
+    was consistently outcompeted in confidence by another species in the same window —
+    a useful signal for spotting likely false positives. The rank is stored per
+    detection in ``segment_rank``.
     """
     # Each detection carries a ``segment_rank``: within its 3-second BirdNET analysis
     # window, all detected species are sorted by confidence descending and assigned a
@@ -392,7 +395,7 @@ def write_summary_tables(rows: list[dict], output_dir: str) -> None:
     per_aru_path = str(Path(output_dir) / "summary-per-aru.csv")
     with open(per_aru_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
-            f, fieldnames=["aru_number", "scientific_name", "species", "detection_count", "max_confidence", "max_position"]
+            f, fieldnames=["aru_number", "scientific_name", "species", "detection_count", "max_confidence", "best_segment_rank"]
         )
         writer.writeheader()
         for (aru, species), data in sorted(per_aru.items(), key=lambda x: (x[0][0], -x[1]["count"])):
@@ -402,7 +405,7 @@ def write_summary_tables(rows: list[dict], output_dir: str) -> None:
                 "scientific_name": data["scientific_name"],
                 "detection_count": data["count"],
                 "max_confidence": f"{data['max_conf']:.4f}",
-                "max_position": fmt_position(best_rank[(aru, species)]),
+                "best_segment_rank": fmt_position(best_rank[(aru, species)]),
             })
 
     # Global aggregation
@@ -417,7 +420,7 @@ def write_summary_tables(rows: list[dict], output_dir: str) -> None:
     global_path = str(Path(output_dir) / "summary-all-arus.csv")
     with open(global_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
-            f, fieldnames=["scientific_name", "species", "total_detections", "max_confidence", "aru_count", "best_position_any_aru"]
+            f, fieldnames=["scientific_name", "species", "total_detections", "max_confidence", "aru_count", "best_segment_rank_any_aru"]
         )
         writer.writeheader()
         for species, data in sorted(global_agg.items(), key=lambda x: -x[1]["count"]):
@@ -427,7 +430,7 @@ def write_summary_tables(rows: list[dict], output_dir: str) -> None:
                 "total_detections": data["count"],
                 "max_confidence": f"{data['max_conf']:.4f}",
                 "aru_count": len(data["arus"]),
-                "best_position_any_aru": fmt_position(int(data["best_rank"])),
+                "best_segment_rank_any_aru": fmt_position(int(data["best_rank"])),
             })
 
     print(f"  Per-ARU summary : {per_aru_path}", file=sys.stderr)

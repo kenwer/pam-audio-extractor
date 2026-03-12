@@ -33,7 +33,7 @@ The tooling covers three steps: 1) copy recordings from SD cards onto disk, 2) r
 Each step can be performed using the **GUI** or using the **CLI**. The GUI opens when the script is run with no arguments. If a `config.toml` exists, the form will use it to pre-populate parameters. On Windows, use the `.bat` launcher instead of the `.py` file.
 
 
-### Step 1 — Import SD card recordings
+### Step 1 - Import SD card recordings
 
 * GUI:
   ```shell
@@ -49,14 +49,31 @@ Once running, it waits for SD cards to be inserted into the reader. The script d
 
 | Option | Default | Description |
 |---|---|---|
-| `target_dir` | — | Root folder where `MSD-*/` subdirectories are created |
+| `target_dir` | - | Root folder where `MSD-*/` subdirectories are created |
 | `--card-pattern` | `^MSD-` | Regex matched against the SD card volume name (case-insensitive) |
 | `--overwrite` | off | Overwrite files that already exist in the destination |
 | `--num-workers` | `2` | Number of cards to copy concurrently |
 
+
+#### Resulting audio file structure
+The `1-import-pam-recordings.py` creates the following layout:
+```
+audio-recordings/
+  MSD-109/
+    20260225_064500.WAV
+    20260225_070000.WAV
+    ...
+  MSD-110/
+    20260225_064500.WAV
+    ...
+```
+- Each subdirectory name is used as the ARU identifier
+- Filenames follow `YYYYMMDD_HHMMSS` for timestamps to be parsed
+- Files should be 16-bit PCM WAV, mono, 48 000 Hz (standard ARU output)
+
 ---
 
-### Step 2 — Analyze recordings with BirdNET
+### Step 2 - Analyze recordings with BirdNET
 
 * GUI:
   ```shell
@@ -78,21 +95,9 @@ Once running, it waits for SD cards to be inserted into the reader. The script d
   ./2-analyze-pam-recordings.py /path/to/audio-recordings --lat 48.52 --lon 9.05 --top-n 1
   ```
 
-Output is written to the specified output directory:
-```
-birdnet-detections_conf_0_25_2026_02_26/
-  All-BirdNET-detections.csv          # enriched detections for all ARUs, incl. segment_rank
-  summary-per-aru.csv                 # detection count, max confidence, and best segment rank per (ARU × species)
-  summary-all-arus.csv                # detection count, max confidence, and best segment rank per species across all ARUs
-  species-list.txt                    # geographic species list used by BirdNET (only when --lat/--lon are set)
-  MSD-109/
-    20260225_064500.BirdNET.results.csv
-    ...
-```
-
 | Option | Default | Description |
 |---|---|---|
-| `audio_dir` | — | Root folder containing ARU subdirectories |
+| `audio_dir` | - | Root folder containing ARU subdirectories |
 | `--species-filter-file` | none | Species filter file (`Scientific name_Common name`, one per line). Ignored when `--lat`/`--lon` are set. |
 | `--min-conf` | `0.25` | Minimum confidence threshold (0–1) |
 | `--top-n` | no limit | Maximum detections per 3-second segment [1–20], ranked by confidence. Useful to suppress low-ranked secondary matches that are usually incorrect. |
@@ -127,9 +132,64 @@ Turdus merula_Eurasian Blackbird
 Porzana porzana_Spotted Crake
 Ardea cinerea_Grey Heron
 ```
+
+#### Output structure
+The output is written to the specified output directory, for example
+```
+birdnet-detections_conf_0_25_2026_02_26/
+  All-BirdNET-detections.csv   # one row per detection, all ARUs combined
+  summary-per-aru.csv          # one row per (ARU × species)
+  summary-all-arus.csv         # one row per species across all ARUs
+  species-list.txt             # geographic species list (only when --lat/--lon are set)
+  MSD-109/
+    20260225_064500.BirdNET.results.csv
+    ...
+```
+
+**All-BirdNET-detections.csv** contains one row per detection above `--min-conf`:
+| Column | Description |
+|---|---|
+| `file` | Absolute path to the source WAV file |
+| `aru_number` | ARU identifier (name of the subdirectory containing the file) |
+| `scientific_name` | Scientific name as reported by BirdNET |
+| `species` | Common name as reported by BirdNET |
+| `confidence` | BirdNET confidence score (0–1) |
+| `segment_rank` | Rank of this species within its 3-second window, sorted by confidence descending (1 = highest-confidence detection in that window, 2 = second-highest, etc.). Useful for spotting likely false positives: a species consistently ranked 2 or lower was always outcompeted by another species in the same window. |
+| `start_time` | Start of the 3-second detection window in seconds |
+| `end_time` | End of the 3-second detection window in seconds |
+| `recording_time` | Recording start timestamp parsed from the filename (`YYYY-MM-DD HH:MM:SS`) |
+| `lat` | Latitude used for analysis (`-1` if not set) |
+| `lon` | Longitude used for analysis (`-1` if not set) |
+| `week` | BirdNET week number used for seasonal filtering (1–48; `-1` = year-round) |
+| `species_list` | Path to the species filter file used (empty if not set) |
+| `min_conf` | Minimum confidence threshold applied |
+| `model` | BirdNET model filename used |
+
+**summary-all-arus.csv** contains one row per species across all ARUs, sorted by total detection count descending:
+| Column | Description |
+|---|---|
+| `scientific_name` | Scientific name |
+| `species` | Common name |
+| `total_detections` | Total detection count across all ARUs |
+| `max_confidence` | Highest confidence score seen across all ARUs |
+| `aru_count` | Number of distinct ARUs where this species was detected |
+| `best_segment_rank_any_aru` | Best (lowest) `segment_rank` this species achieved in any single 3-second window across all ARUs |
+
+**summary-per-aru.csv** contains one row per (ARU × species), sorted by ARU then detection count descending:
+| Column | Description |
+|---|---|
+| `aru_number` | ARU identifier |
+| `scientific_name` | Scientific name |
+| `species` | Common name |
+| `detection_count` | Number of detections above `--min-conf` |
+| `max_confidence` | Highest confidence score seen across all detections |
+| `best_segment_rank` | Best (lowest) `segment_rank` this species achieved in any single 3-second window at this ARU (e.g. `top-1` means it was the dominant detection in at least one window) |
+
+**species-list.txt** contains the species list that the geographic model returned for the lat/lon/week. Only written when `--lat`/`--lon` are set. It represents the candidate species list BirdNET used for this run.
+
 ---
 
-### Step 3 — Extract top detections for review
+### Step 3 - Extract top detections for review
 
 * GUI:
   ```shell
@@ -141,14 +201,14 @@ Ardea cinerea_Grey Heron
   ./3-extract-top-detections.py birdnet-detections_conf_0_25_2026_02_26/All-BirdNET-detections.csv
   ```
 
-Snippets are written to `top-detection-snippets/` next to the source audio recordings. Each filename encodes ARU, species, segment rank (rank of this species within its 3-second window — 1 = highest-confidence detection in that window), confidence, timestamp, and detection window:
+Snippets are written to `top-detection-snippets/` next to the source audio recordings. Each filename encodes ARU, species, segment rank (rank of this species within its 3-second window - 1 = highest-confidence detection in that window), confidence, timestamp, and detection window:
 ```
 MSD-109_-_Turdus iliacus_Redwing_-_segrank2_-_conf0.4691_-_20260225_064500_-_36.0_-_39.0.wav
 ```
 
 | Option | Default | Description |
 |---|---|---|
-| `detections_csv` | — | Path to `All-BirdNET-detections.csv` |
+| `detections_csv` | - | Path to `All-BirdNET-detections.csv` |
 | `--top-n` | `10` | Max snippets per (ARU, species) pair, ranked by confidence |
 | `--padding` | `1.5` | Seconds of audio before/after each detection window |
 | `--output` | `<audio_dir>/top-detection-snippets` | Override output directory |
@@ -166,23 +226,6 @@ MSD-109_-_Turdus iliacus_Redwing_-_segrank2_-_conf0.4691_-_20260225_064500_-_36.
 ```
 
 ---
-
-## Audio File Structure
-
-`1-import-pam-recordings.py` creates this layout automatically. If importing manually, match it exactly:
-```
-audio-recordings/
-  MSD-109/
-    20260225_064500.WAV
-    20260225_070000.WAV
-    ...
-  MSD-110/
-    20260225_064500.WAV
-    ...
-```
-- Each subdirectory name is used as the ARU identifier
-- Filenames must follow `YYYYMMDD_HHMMSS` for timestamps to be parsed
-- Files should be 16-bit PCM WAV, mono, 48 000 Hz (standard ARU output)
 
 ## License
 
