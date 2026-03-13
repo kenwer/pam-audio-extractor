@@ -317,7 +317,7 @@ def main() -> None:
     rows = load_detections(args.detections_csv)
     output_dir = Path(args.output) if args.output else default_output_dir(args.detections_csv, rows)
     # Detect locale columns present in the CSV (e.g. species_de, species_fr).
-    locale_cols = [k for k in (rows[0].keys() if rows else []) if k.startswith("species_")]
+    locale_cols = [k for k in (rows[0].keys() if rows else []) if re.match(r"species_[a-z]{2}(?:_[a-zA-Z]{2})?$", k)]
     rows = apply_filters(rows, args)
 
     # Group by (aru_number, species_key)
